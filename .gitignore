@@ -1,0 +1,40 @@
+# ============================================================
+# .gitignore — TNB Siltation Monitor
+# ============================================================
+
+# CRITICAL — Never push service account to GitHub
+service_account.json
+*.json
+
+# Streamlit secrets (local only)
+.streamlit/secrets.toml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+.venv/
+env/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Databases & Cache
+*.db
+*.sqlite
+*.db-shm
+*.db-wal
+.cache/
+data/*.db

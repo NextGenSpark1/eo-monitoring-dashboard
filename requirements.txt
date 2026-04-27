@@ -1,0 +1,7 @@
+earthengine-api
+geemap
+streamlit
+pandas
+folium
+streamlit-folium
+pycryptodome

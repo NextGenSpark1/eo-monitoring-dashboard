@@ -1,0 +1,75 @@
+# ============================================================
+# .github/workflows/daily_check.yml
+# ============================================================
+# Automated daily siltation check — runs at 2AM Malaysia time
+# (UTC+8, so 6PM UTC = 2AM MYT)
+#
+# What it does:
+# 1. Wakes up at 2AM every day
+# 2. Runs alert_system.py
+# 3. If critical siltation found → logs alert to database
+# 4. Commits updated database back to repo
+# 5. Dashboard is updated when TNB logs in at 9AM
+# ============================================================
+
+name: Daily Siltation Check
+
+on:
+  schedule:
+    # Runs at 18:00 UTC = 2:00 AM Malaysia Time (UTC+8)
+    - cron: '0 18 * * *'
+
+  # Allow manual trigger from GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  daily-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Check out the repository
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Python
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: |
+          pip install earthengine-api pandas pycryptodome
+
+      # Step 4: Write service account credentials from GitHub secret
+      # The EARTHENGINE_TOKEN secret must be set in:
+      # GitHub repo → Settings → Secrets and variables → Actions
+      - name: Write GEE service account credentials
+        run: |
+          echo '${{ secrets.EARTHENGINE_TOKEN }}' > service_account.json
+
+      # Step 5: Run the daily alert check
+      - name: Run daily siltation check
+        env:
+          EARTHENGINE_TOKEN: ${{ secrets.EARTHENGINE_TOKEN }}
+        run: |
+          python alert_system.py
+
+      # Step 6: Commit updated database back to repo
+      # This ensures the dashboard always has fresh data
+      - name: Commit updated database
+        run: |
+          git config --global user.name  "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/tnb_monitoring.db
+          git diff --staged --quiet || git commit -m "Daily update: $(date +'%Y-%m-%d') siltation check"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Step 7: Clean up credentials (security)
+      - name: Remove credentials
+        if: always()
+        run: |
+          rm -f service_account.json
