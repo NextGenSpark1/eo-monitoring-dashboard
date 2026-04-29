@@ -70,26 +70,19 @@ st.markdown(get_css(t, theme_choice), unsafe_allow_html=True)
 # DATA LOADING — CSV + GeoJSON
 # ──────────────────────────────────────────────────────────────
 
-@st.cache_data
-def load_zone_metadata():
-    with open("data/zones.geojson") as geojson_file:
-        geojson = json.load(geojson_file)
-    zones = {}
-    for feature in geojson["features"]:
-        props = feature["properties"]
-        coords = feature["geometry"]["coordinates"][0]
-        lats = [coord[1] for coord in coords]
-        lons = [coord[0] for coord in coords]
-        zones[props["name"]] = {
-            "lat": sum(lats) / len(lats),
-            "lon": sum(lons) / len(lons),
-            "zone_id": props.get("zone_id", ""),
-        }
-    return zones
+ZONE_COORDS = {
+    RESERVOIR_CONFIG["name"]: {
+        "lat":     RESERVOIR_CONFIG["lat"],
+        "lon":     RESERVOIR_CONFIG["lon"],
+        "zone_id": "RES-001",
+    },
+    FARM_CONFIG["name"]: {
+        "lat":     FARM_CONFIG["lat"],
+        "lon":     FARM_CONFIG["lon"],
+        "zone_id": "FARM-001",
+    },
+}
 
-@st.cache_data
-def load_raw_csv():
-    return pd.read_csv("data/eo_monitoring_output.csv", parse_dates=["date"])
 
 def compute_trend(sorted_values):
     if len(sorted_values) < 2:
@@ -101,71 +94,89 @@ def compute_trend(sorted_values):
         return "falling"
     return "stable"
 
-@st.cache_data
+
+@st.cache_data(ttl=300)
 def load_hydro_data():
-    df = load_raw_csv()
-    zones = load_zone_metadata()
-    hydro_df = df[df["use_case"] == "Hydro monitoring"].copy()
+    """Latest hydro reading per zone (transformed for the dashboard cards)."""
+    df = read_hydro_data()
+    if df.empty:
+        return pd.DataFrame()
+
+    df = df.sort_values("date")
     result = []
-    for zone_name, group in hydro_df.groupby("zone"):
-        if zone_name not in zones:
+    for zone_name, group in df.groupby("zone"):
+        if zone_name not in ZONE_COORDS:
             continue
-        group = group.sort_values("date")
         latest_row = group.iloc[-1]
+        coords = ZONE_COORDS[zone_name]
         result.append({
-            "zone_id":  zones[zone_name]["zone_id"],
-            "name":     zone_name,
-            "lat":      zones[zone_name]["lat"],
-            "lon":      zones[zone_name]["lon"],
-            "turbidity": round(latest_row["NDTI_mean"], 4),
-            "status":   latest_row["alert_level"],
-            "trend":    compute_trend(group["NDTI_mean"]),
-            "ndwi":     round(latest_row["NDWI_mean"], 4),
-            "ndti_min": round(latest_row["NDTI_min"], 4),
-            "ndti_max": round(latest_row["NDTI_max"], 4),
+            "zone_id":   coords["zone_id"],
+            "name":      zone_name,
+            "lat":       coords["lat"],
+            "lon":       coords["lon"],
+            "turbidity": round(latest_row["ndti_mean"], 4) if pd.notna(latest_row["ndti_mean"]) else 0.0,
+            "status":    latest_row.get("alert_level", "normal"),
+            "trend":     compute_trend(group["ndti_mean"]),
+            "ndwi":      round(latest_row["ndwi_mean"], 4) if pd.notna(latest_row.get("ndwi_mean")) else 0.0,
+            "ndti_min":  round(latest_row["ndti_min"], 4) if pd.notna(latest_row.get("ndti_min")) else 0.0,
+            "ndti_max":  round(latest_row["ndti_max"], 4) if pd.notna(latest_row.get("ndti_max")) else 0.0,
         })
     return pd.DataFrame(result)
 
-@st.cache_data
+
+@st.cache_data(ttl=300)
 def load_agri_data():
-    df = load_raw_csv()
-    zones = load_zone_metadata()
-    agri_df = df[df["use_case"] == "Agriculture monitoring"].copy()
+    """Latest agri reading per zone (transformed for the dashboard cards)."""
+    df = read_agri_data()
+    if df.empty:
+        return pd.DataFrame()
+
+    df = df.sort_values("date")
     result = []
-    for zone_name, group in agri_df.groupby("zone"):
-        if zone_name not in zones:
+    for zone_name, group in df.groupby("zone"):
+        if zone_name not in ZONE_COORDS:
             continue
-        group = group.sort_values("date")
         latest_row = group.iloc[-1]
+        coords = ZONE_COORDS[zone_name]
         result.append({
-            "zone_id":  zones[zone_name]["zone_id"],
+            "zone_id":  coords["zone_id"],
             "name":     zone_name,
-            "lat":      zones[zone_name]["lat"],
-            "lon":      zones[zone_name]["lon"],
-            "ndvi":     round(latest_row["NDVI_mean"], 4),
-            "status":   latest_row["alert_level"],
-            "trend":    compute_trend(group["NDVI_mean"]),
-            "ndre":     round(latest_row["NDRE_mean"], 4),
-            "ndvi_min": round(latest_row["NDVI_min"], 4),
-            "ndvi_max": round(latest_row["NDVI_max"], 4),
+            "lat":      coords["lat"],
+            "lon":      coords["lon"],
+            "ndvi":     round(latest_row["ndvi_mean"], 4) if pd.notna(latest_row["ndvi_mean"]) else 0.0,
+            "status":   latest_row.get("alert_level", "normal"),
+            "trend":    compute_trend(group["ndvi_mean"]),
+            "ndre":     round(latest_row["ndre_mean"], 4) if pd.notna(latest_row.get("ndre_mean")) else 0.0,
+            "ndvi_min": round(latest_row["ndvi_min"], 4) if pd.notna(latest_row.get("ndvi_min")) else 0.0,
+            "ndvi_max": round(latest_row["ndvi_max"], 4) if pd.notna(latest_row.get("ndvi_max")) else 0.0,
         })
     return pd.DataFrame(result)
 
-@st.cache_data
+
+@st.cache_data(ttl=300)
 def load_hydro_trends():
-    df = load_raw_csv()
-    hydro_df = df[df["use_case"] == "Hydro monitoring"][["date", "zone", "NDTI_mean"]].copy()
-    pivot = hydro_df.pivot(index="date", columns="zone", values="NDTI_mean")
+    """Pivot hydro NDTI history into a date×zone table for the trend chart."""
+    df = read_hydro_data()
+    if df.empty:
+        return pd.DataFrame(columns=["date"])
+    df = df[["date", "zone", "ndti_mean"]].copy()
+    df["date"] = pd.to_datetime(df["date"])
+    pivot = df.pivot(index="date", columns="zone", values="ndti_mean")
     pivot = pivot.sort_index().reset_index()
     pivot.columns.name = None
     pivot["date"] = pivot["date"].dt.strftime("%d %b %Y")
     return pivot
 
-@st.cache_data
+
+@st.cache_data(ttl=300)
 def load_agri_trends():
-    df = load_raw_csv()
-    agri_df = df[df["use_case"] == "Agriculture monitoring"][["date", "zone", "NDVI_mean"]].copy()
-    pivot = agri_df.pivot(index="date", columns="zone", values="NDVI_mean")
+    """Pivot agri NDVI history into a date×zone table for the trend chart."""
+    df = read_agri_data()
+    if df.empty:
+        return pd.DataFrame(columns=["date"])
+    df = df[["date", "zone", "ndvi_mean"]].copy()
+    df["date"] = pd.to_datetime(df["date"])
+    pivot = df.pivot(index="date", columns="zone", values="ndvi_mean")
     pivot = pivot.sort_index().reset_index()
     pivot.columns.name = None
     pivot["date"] = pivot["date"].dt.strftime("%d %b %Y")
