@@ -412,6 +412,43 @@ def read_alerts_log(limit=50):
     return pd.DataFrame(result.data)
 
 
+# SUBSCRIBERS
+
+def add_subscriber(chat_id):
+    """Add a Telegram chat ID to subscribers table. Idempotent — won't duplicate."""
+    client = get_supabase_client()
+    try:
+        client.table("subscribers").upsert(
+            {"chat_id": str(chat_id)},
+            on_conflict="chat_id"
+        ).execute()
+        return True
+    except Exception as e:
+        print(f"Failed to add subscriber: {e}")
+        return False
+
+
+def get_all_subscribers():
+    """Return list of all subscriber chat IDs."""
+    client = get_supabase_client()
+    try:
+        result = client.table("subscribers").select("chat_id").execute()
+        return [row["chat_id"] for row in result.data]
+    except Exception as e:
+        print(f"Failed to fetch subscribers: {e}")
+        return []
+
+
+def remove_subscriber(chat_id):
+    """Remove a subscriber by chat ID."""
+    client = get_supabase_client()
+    try:
+        client.table("subscribers").delete().eq("chat_id", str(chat_id)).execute()
+        return True
+    except Exception:
+        return False
+
+
 # HEALTH CHECK
 
 def check_database_health():
