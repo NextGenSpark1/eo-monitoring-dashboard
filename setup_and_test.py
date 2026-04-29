@@ -1,13 +1,3 @@
-"""
-================================================================================
-setup_and_test.py
-================================================================================
-Developer  : Mohamed Nawran
-Description: Run this ONCE to verify your entire setup is correct.
-             Checks database, paths, imports, and data.
-             Run from repo root: python setup_and_test.py
-================================================================================
-"""
 
 import os
 import sys

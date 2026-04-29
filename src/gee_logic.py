@@ -1,25 +1,11 @@
-"""
-================================================================================
-src/gee_logic.py  — UPDATED with diskcache for fast demo loading
-================================================================================
-Developer  : Mohamed Nawran (AI Platform Engineering)
-Description: Pure GEE functions + diskcache for instant zone switching.
-             First load per zone: 10-30 seconds (GEE processing)
-             Subsequent loads  : instant (served from local disk cache)
-================================================================================
-"""
+
 
 import ee
 import json
 import os
 import diskcache as dc
 
-# ============================================================
 # DISK CACHE SETUP
-# ============================================================
-# Cache stored in .cache/ folder — persists between runs
-# Perfect for demo: pre-load zones before presentation,
-# then all switches are instant
 
 CACHE_DIR  = ".cache"
 CACHE_TTL  = 60 * 60 * 24 * 7   # 7 days cache expiry
@@ -29,7 +15,7 @@ cache      = dc.Cache(CACHE_DIR)
 def clear_cache():
     """Clear all cached GEE results. Use when you want fresh data."""
     cache.clear()
-    print("✅ Cache cleared")
+    print("Cache cleared")
 
 
 def warm_up_cache():
@@ -54,14 +40,11 @@ def warm_up_cache():
     print("\n✅ Cache warm-up complete — demo is ready!")
 
 
-# ============================================================
 # AUTHENTICATION
-# ============================================================
 
 def initialize_gee():
     """
     Headless GEE authentication.
-    Works locally (service_account.json) and on Streamlit Cloud (st.secrets).
     """
     try:
         import streamlit as st
@@ -104,9 +87,7 @@ def initialize_gee():
     raise Exception("❌ GEE authentication failed.")
 
 
-# ============================================================
 # REGION DEFINITIONS
-# ============================================================
 
 FARM_CONFIG = {
     "name":        "Felda Jengka",
@@ -141,9 +122,7 @@ def get_geometry(config):
     )
 
 
-# ============================================================
 # IMAGE LOADING — WITH CACHE
-# ============================================================
 
 def load_sentinel2(geometry, start_date, end_date, cloud_threshold=20):
     """
@@ -160,12 +139,12 @@ def load_sentinel2(geometry, start_date, end_date, cloud_threshold=20):
     # Check cache first
     cached = cache.get(cache_key)
     if cached is not None:
-        print(f"   ⚡ Cache hit — instant load")
+        print(f"Cache hit — instant load")
         # Return cached stats (we cache stats, not the ee.Image object)
         return cached["image_proxy"], cached["cloud_pct"], cached["last_clear"]
 
     # Not in cache — fetch from GEE
-    print(f"   📡 Fetching from GEE (will cache for next time)...")
+    print(f"Fetching from GEE (will cache for next time)...")
 
     collection = (
         ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
@@ -202,9 +181,7 @@ def load_sentinel2(geometry, start_date, end_date, cloud_threshold=20):
     return image, cloud_pct, last_clear
 
 
-# ============================================================
 # INDEX COMPUTATIONS
-# ============================================================
 
 def compute_ndti(image):
     """NDTI = (B4-B3)/(B4+B3) — Turbidity. Higher = dirtier water."""
@@ -226,9 +203,7 @@ def compute_ndre(image):
     return image.normalizedDifference(["B8A", "B5"]).rename("NDRE")
 
 
-# ============================================================
 # STATISTICS EXTRACTION
-# ============================================================
 
 def extract_stats(index_image, geometry, index_name, scale=10):
     """Extract mean, min, max for an index over a zone."""
@@ -251,9 +226,8 @@ def extract_stats(index_image, geometry, index_name, scale=10):
     }
 
 
-# ============================================================
+
 # ALERT LOGIC
-# ============================================================
 
 def compute_alert_level(ndti_mean=None, ndvi_mean=None, ndre_mean=None):
     """Returns 'normal' | 'warning' | 'critical'"""
@@ -279,9 +253,7 @@ def compute_alert_level(ndti_mean=None, ndvi_mean=None, ndre_mean=None):
     return "normal"
 
 
-# ============================================================
 # LIVE MAP TILE (for geemap in dashboard)
-# ============================================================
 
 def get_turbidity_map(lat, lon, date_str, buffer_m=2000):
     """
@@ -307,9 +279,8 @@ def get_turbidity_map(lat, lon, date_str, buffer_m=2000):
     return compute_ndti(image), area
 
 
-# ============================================================
+
 # FULL PIPELINE RUNNER — 12 MONTHS
-# ============================================================
 
 def run_full_pipeline(months_back=12):
     """
@@ -336,7 +307,7 @@ def run_full_pipeline(months_back=12):
         ))
         current = window_end
 
-    print(f"\n📅 Processing {months_back} months ({len(date_windows)} windows)")
+    print(f"\n Processing {months_back} months ({len(date_windows)} windows)")
     print(f"   From : {start_date.strftime('%Y-%m-%d')}")
     print(f"   To   : {end_date.strftime('%Y-%m-%d')}\n")
 
@@ -345,14 +316,14 @@ def run_full_pipeline(months_back=12):
 
     for zone_type, config in [("reservoir", RESERVOIR_CONFIG), ("farm", FARM_CONFIG)]:
         geometry = get_geometry(config)
-        print(f"🌍 {config['name']}")
+        print(f" {config['name']}")
 
         for start, end in date_windows:
-            print(f"  📆 {start} → {end}", end=" ")
+            print(f" {start} → {end}", end=" ")
             image, cloud_pct, last_clear = load_sentinel2(geometry, start, end)
 
             if image is None:
-                print("⏭️  skipped")
+                print(" skipped")
                 continue
 
             if zone_type == "reservoir":
@@ -389,12 +360,12 @@ def run_full_pipeline(months_back=12):
                     "alert_level": alert,
                     "cloud_pct":   cloud_pct
                 })
-            print("✅")
+            print("processed")
 
     hydro_df = pd.DataFrame(hydro_records)
     agri_df  = pd.DataFrame(agri_records)
 
-    print(f"\n✅ Pipeline complete!")
+    print(f"\n Pipeline complete!")
     print(f"   Hydro : {len(hydro_df)} records")
     print(f"   Agri  : {len(agri_df)} records")
 

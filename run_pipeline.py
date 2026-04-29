@@ -1,23 +1,3 @@
-"""
-================================================================================
-run_pipeline.py
-================================================================================
-Developer  : Mohamed Nawran
-Description: Run this to populate the database with REAL satellite data
-             for both zones — Reservoir and Palm Oil Farm.
-
-Run from repo root:
-    python run_pipeline.py
-
-What it does:
-1. Connects to GEE using service_account.json
-2. Pulls 12 months of Sentinel-2 data for BOTH zones
-3. Computes NDTI + NDWI for reservoir
-4. Computes NDVI + NDRE for palm oil farm
-5. Writes everything to SQLite database
-6. Prints health check so you can confirm data is there
-================================================================================
-"""
 
 import sys
 import os

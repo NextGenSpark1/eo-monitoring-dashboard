@@ -1,13 +1,3 @@
-"""
-================================================================================
-alert_system.py
-================================================================================
-Developer  : Mohamed Nawran (AI Platform Engineering)
-Description: Automated daily alert script — triggered by GitHub Actions at 2AM.
-             Checks latest turbidity levels, logs alerts, updates database.
-             Runs independently of the Streamlit UI.
-================================================================================
-"""
 
 import sys
 import os
@@ -117,7 +107,7 @@ def run_daily_check():
     # -------------------------------------------------------
     # Step 2: Process Reservoir (Empangan Sultan Abu Bakar)
     # -------------------------------------------------------
-    print(f"\n💧 Checking: {RESERVOIR_CONFIG['name']}")
+    print(f"\n Checking: {RESERVOIR_CONFIG['name']}")
 
     reservoir_geometry = get_geometry(RESERVOIR_CONFIG)
     image, cloud_pct, last_clear = load_sentinel2(

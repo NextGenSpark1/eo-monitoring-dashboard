@@ -1,33 +1,12 @@
-"""
-================================================================================
-src/telegram_helper.py
-================================================================================
-Developer  : Mohamed Nawran (AI Platform Engineering)
-Description: Telegram notification helper.
-             Habiba uses send_test_alert() for the "Trigger Test Alert" button.
-             Manager requirement: real Telegram message sent to phone on click.
 
-Setup steps (Nawran does this, gives Habiba the tokens):
-1. Open Telegram → search @BotFather
-2. Send /newbot → follow instructions → get BOT_TOKEN
-3. Add the bot to a group OR message it directly
-4. Get CHAT_ID by visiting:
-   https://api.telegram.org/bot<BOT_TOKEN>/getUpdates
-5. Add both to Streamlit secrets:
-   [telegram]
-   bot_token = "your-bot-token"
-   chat_id   = "your-chat-id"
-================================================================================
-"""
 
 import requests
 import os
 from datetime import datetime
 
 
-# ============================================================
+
 # TELEGRAM CONFIG
-# ============================================================
 
 def get_telegram_config():
     """
@@ -53,9 +32,8 @@ def get_telegram_config():
     return None, None
 
 
-# ============================================================
+
 # SEND MESSAGE
-# ============================================================
 
 def send_telegram_message(message):
     """
@@ -90,9 +68,7 @@ def send_telegram_message(message):
         return False
 
 
-# ============================================================
 # ALERT MESSAGES
-# ============================================================
 
 def send_critical_alert(zone, ndti_value, date=None):
     """
@@ -160,37 +136,15 @@ def send_test_alert(zone="Empangan Sultan Abu Bakar"):
         return False, "❌ Failed to send. Check Telegram configuration in secrets."
 
 
-# ============================================================
+
 # SETUP INSTRUCTIONS (printed when run directly)
-# ============================================================
+
 
 if __name__ == "__main__":
     print("=" * 55)
     print("  Telegram Setup Guide")
     print("=" * 55)
-    print("""
-1. Open Telegram on your phone
-2. Search for @BotFather
-3. Send: /newbot
-4. Choose a name (e.g. "TNB Siltation Bot")
-5. Choose a username (e.g. "tnb_siltation_bot")
-6. BotFather gives you a TOKEN — save it
-
-7. Start a chat with your new bot
-8. Visit this URL in browser:
-   https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
-9. Send any message to your bot first
-10. The URL response shows your chat_id
-
-11. Add to .streamlit/secrets.toml:
-    [telegram]
-    bot_token = "your-token-here"
-    chat_id   = "your-chat-id-here"
-
-12. Add to GitHub Actions secrets:
-    TELEGRAM_BOT_TOKEN = your-token
-    TELEGRAM_CHAT_ID   = your-chat-id
-""")
+    print("do it yourself")
     print("Testing connection...")
     success, msg = send_test_alert()
     print(msg)
