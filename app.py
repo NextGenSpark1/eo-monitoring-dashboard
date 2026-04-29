@@ -415,28 +415,27 @@ with st.sidebar:
     if subscribe_clicked:
         if chat_id_input.strip():
             chat_id = chat_id_input.strip()
-            try:
-                with open("data/subscribers.json") as subscribers_file:
-                    subscribers = json.load(subscribers_file)
-            except Exception:
-                subscribers = []
-            if chat_id not in subscribers:
-                subscribers.append(chat_id)
-                with open("data/subscribers.json", "w") as subscribers_file:
-                    json.dump(subscribers, subscribers_file)
-            ok, error_msg = send_telegram(
-                chat_id,
-                "You are now subscribed to TNB Siltation Monitor alerts.\n\nYou will receive notifications when any zone exceeds the configured thresholds.\n\nTNB Siltation Monitor — EO Dashboard"
-            )
-            st.markdown(f'<div class="sb-feedback {"sb-ok" if ok else "sb-err"}">{"Subscribed successfully." if ok else f"Failed: {error_msg}"}</div>', unsafe_allow_html=True)
+            saved = add_subscriber(chat_id)
+            if saved:
+                ok, error_msg = send_subscription_welcome(chat_id)
+                st.markdown(
+                    f'<div class="sb-feedback {"sb-ok" if ok else "sb-err"}">'
+                    f'{"Subscribed successfully." if ok else f"Failed: {error_msg}"}</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown('<div class="sb-feedback sb-err">Could not save subscriber. Check Supabase connection.</div>', unsafe_allow_html=True)
         else:
             st.markdown('<div class="sb-feedback sb-warn">Enter a chat ID first.</div>', unsafe_allow_html=True)
 
     if test_clicked:
         if chat_id_input.strip():
-            test_message = build_alert_message("Timah Tasoh Reservoir", "0.142", "critical", "turbidity", "Hydro")
-            ok, error_msg = send_telegram(chat_id_input.strip(), test_message)
-            st.markdown(f'<div class="sb-feedback {"sb-ok" if ok else "sb-err"}">{"Test alert sent to Telegram." if ok else f"Failed: {error_msg}"}</div>', unsafe_allow_html=True)
+            ok, error_msg = send_test_alert(chat_id_input.strip())
+            st.markdown(
+                f'<div class="sb-feedback {"sb-ok" if ok else "sb-err"}">'
+                f'{"Test alert sent to Telegram." if ok else f"Failed: {error_msg}"}</div>',
+                unsafe_allow_html=True,
+            )
         else:
             st.markdown('<div class="sb-feedback sb-warn">Enter a chat ID first.</div>', unsafe_allow_html=True)
     st.markdown(f'<div style="font-size:10px;color:{t["text4"]};margin-top:8px;line-height:1.6;">Get your ID via <b style="color:{t["text3"]};">@userinfobot</b> on Telegram.</div>', unsafe_allow_html=True)
@@ -477,11 +476,7 @@ filtered_alerts = [a for a in get_all_alerts(all_zones, value_col) if a["status"
 
 # Auto-send alerts to subscribers when threshold is breached
 if filtered_alerts:
-    try:
-        with open("data/subscribers.json") as subscribers_file:
-            subscribers = json.load(subscribers_file)
-    except Exception:
-        subscribers = []
+    subscribers = get_all_subscribers()
     if subscribers:
         sent_state_key = f"sent_keys_{value_col}"
         if sent_state_key not in st.session_state:
@@ -498,7 +493,7 @@ if filtered_alerts:
                 alert["zone"], str(index_value), alert["severity"], value_col, module_name
             )
             for subscriber_chat_id in subscribers:
-                send_telegram(subscriber_chat_id, alert_message)
+                send_telegram_message(subscriber_chat_id, alert_message)
         st.session_state[sent_state_key] = current_alert_keys
 else:
     st.session_state[f"sent_keys_{value_col}"] = set()
