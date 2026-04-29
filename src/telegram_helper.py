@@ -1,150 +1,111 @@
-
-
-import requests
 import os
+import requests
 from datetime import datetime
 
 
+# CONFIG
 
-# TELEGRAM CONFIG
-
-def get_telegram_config():
-    """
-    Get Telegram bot token and chat ID.
-    Tries Streamlit secrets first, then environment variables.
-    """
+def get_bot_token():
+    """Read Telegram bot token from Streamlit secrets or environment variable."""
     try:
         import streamlit as st
-        return (
-            st.secrets["telegram"]["bot_token"],
-            st.secrets["telegram"]["chat_id"]
-        )
+        return st.secrets["telegram"]["bot_token"]
     except Exception:
         pass
-
-    # Fallback to environment variables
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    chat_id   = os.environ.get("TELEGRAM_CHAT_ID")
-
-    if bot_token and chat_id:
-        return bot_token, chat_id
-
-    return None, None
+    return os.environ.get("TELEGRAM_BOT_TOKEN", "")
 
 
+# CORE SENDER
 
-# SEND MESSAGE
-
-def send_telegram_message(message):
+def send_telegram_message(chat_id, message):
     """
-    Send a message via Telegram bot.
-
-    Returns:
-        bool: True if sent successfully, False otherwise
+    Send a single Telegram message to one chat ID.
+    Returns (ok: bool, info: str).
     """
-    bot_token, chat_id = get_telegram_config()
+    token = get_bot_token()
+    if not token:
+        return False, "Bot token not configured."
 
-    if not bot_token or not chat_id:
-        print("⚠️  Telegram not configured. Add bot_token and chat_id to secrets.")
-        return False
-
-    url  = f"https://api.telegram.org/bot{bot_token}/sendMessage"
-    data = {
-        "chat_id":    chat_id,
-        "text":       message,
-        "parse_mode": "HTML"
-    }
-
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
     try:
-        response = requests.post(url, data=data, timeout=10)
+        response = requests.post(
+            url,
+            json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"},
+            timeout=10,
+        )
         if response.status_code == 200:
-            print("✅ Telegram message sent successfully")
-            return True
+            return True, "Sent"
+        return False, response.json().get("description", "Unknown error")
+    except Exception as exception:
+        return False, str(exception)
+
+
+def broadcast_to_subscribers(message):
+    """
+    Send the same message to every subscriber stored in Supabase.
+    Returns (sent_count, failed_count).
+    """
+    from src.database import get_all_subscribers
+
+    subscribers = get_all_subscribers()
+    sent = 0
+    failed = 0
+    for chat_id in subscribers:
+        ok, _ = send_telegram_message(chat_id, message)
+        if ok:
+            sent += 1
         else:
-            print(f"❌ Telegram error: {response.status_code} — {response.text}")
-            return False
-    except Exception as e:
-        print(f"❌ Telegram failed: {e}")
-        return False
+            failed += 1
+    return sent, failed
 
 
-# ALERT MESSAGES
+# MESSAGE BUILDERS
 
-def send_critical_alert(zone, ndti_value, date=None):
-    """
-    Send a critical siltation alert to Telegram.
-    Called by alert_system.py and the dashboard test button.
-    """
-    if date is None:
-        date = datetime.now().strftime("%Y-%m-%d %H:%M")
+def build_alert_message(zone_name, index_value, status, value_col, module_name, event_label=None):
+    """Build the standard alert message used by both dashboard and pipeline."""
+    now = datetime.now().strftime("%d %b %Y, %H:%M")
+    index_label = "NDTI" if value_col == "turbidity" else "NDVI"
+    status_emoji = "🔴" if status == "critical" else "🟡"
+    status_label = "CRITICAL" if status == "critical" else "WARNING"
 
-    message = (
-        f"🚨 <b>CRITICAL SILTATION ALERT</b>\n\n"
-        f"📍 <b>Zone:</b> {zone}\n"
-        f"📅 <b>Date:</b> {date}\n"
-        f"💧 <b>NDTI:</b> {ndti_value:.4f}\n"
-        f"⚠️ <b>Status:</b> CRITICAL — High Turbidity\n\n"
-        f"🏗️ <b>Recommended Action:</b>\n"
-        f"Deploy dredging barge to this zone immediately.\n"
-        f"Estimated silt accumulation is above safe threshold.\n\n"
-        f"🤖 <i>TNB Siltation Monitor — Automated Alert</i>"
+    insight_line = f"\n<b>Insight:</b> {event_label}\n" if event_label else ""
+
+    return (
+        f"<b>{status_emoji} {status_label} — {module_name} Zone Alert</b>\n\n"
+        f"<b>Zone:</b> {zone_name}\n"
+        f"<b>Time:</b> {now}\n"
+        f"<b>{index_label}:</b> {index_value}\n"
+        f"<b>Status:</b> {status_label}\n"
+        f"{insight_line}\n"
+        f"Please open the dashboard to review the latest readings and take action if needed.\n\n"
+        f"<i>TNB Siltation Monitor — EO Dashboard</i>"
     )
-    return send_telegram_message(message)
 
 
-def send_warning_alert(zone, ndti_value, date=None):
-    """Send a warning level alert."""
-    if date is None:
-        date = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    message = (
-        f"⚠️ <b>SILTATION WARNING</b>\n\n"
-        f"📍 <b>Zone:</b> {zone}\n"
-        f"📅 <b>Date:</b> {date}\n"
-        f"💧 <b>NDTI:</b> {ndti_value:.4f}\n"
-        f"⚠️ <b>Status:</b> WARNING — Moderate Turbidity\n\n"
-        f"👀 <b>Recommended Action:</b>\n"
-        f"Monitor this zone closely over the next 7 days.\n"
-        f"Schedule dredging if level rises further.\n\n"
-        f"🤖 <i>TNB Siltation Monitor — Automated Alert</i>"
+def build_test_message():
+    """Demo test message shown when the user clicks the Test Alert button."""
+    return build_alert_message(
+        zone_name="Empangan Sultan Abu Bakar",
+        index_value="0.142",
+        status="critical",
+        value_col="turbidity",
+        module_name="Hydro",
+        event_label="Simulated event — system check only",
     )
-    return send_telegram_message(message)
 
 
-def send_test_alert(zone="Empangan Sultan Abu Bakar"):
-    """
-    Demo test alert — triggered by Habiba's dashboard button.
-    Sends a realistic looking critical alert to demonstrate the system.
-    """
+# CONVENIENCE WRAPPERS
+
+def send_test_alert(chat_id):
+    """Send a test alert to one chat ID (used by the dashboard button)."""
+    return send_telegram_message(chat_id, build_test_message())
+
+
+def send_subscription_welcome(chat_id):
+    """Send the welcome message after a successful subscription."""
     message = (
-        f"🚨 <b>TEST ALERT — TNB Siltation Monitor</b>\n\n"
-        f"📍 <b>Zone:</b> {zone}\n"
-        f"📅 <b>Date:</b> {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-        f"💧 <b>NDTI:</b> 0.1420 (Simulated)\n"
-        f"⚠️ <b>Status:</b> CRITICAL — High Turbidity\n\n"
-        f"🏗️ <b>Recommended Action:</b>\n"
-        f"Deploy dredging barge immediately.\n"
-        f"Estimated silt accumulation exceeds safe threshold.\n\n"
-        f"✅ <i>This is a test message. System is working correctly.</i>\n"
-        f"🤖 <i>TNB Siltation Monitor — Demo Mode</i>"
+        "You are now subscribed to TNB Siltation Monitor alerts.\n\n"
+        "You will receive notifications when any zone exceeds the configured thresholds.\n\n"
+        "TNB Siltation Monitor — EO Dashboard"
     )
-    success = send_telegram_message(message)
-
-    if success:
-        return True, "✅ Test alert sent! Check your Telegram."
-    else:
-        return False, "❌ Failed to send. Check Telegram configuration in secrets."
-
-
-
-# SETUP INSTRUCTIONS (printed when run directly)
-
-
-if __name__ == "__main__":
-    print("=" * 55)
-    print("  Telegram Setup Guide")
-    print("=" * 55)
-    print("do it yourself")
-    print("Testing connection...")
-    success, msg = send_test_alert()
-    print(msg)
+    return send_telegram_message(chat_id, message)
