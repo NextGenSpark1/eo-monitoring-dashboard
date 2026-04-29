@@ -21,7 +21,12 @@ from database import (
     init_database,
     write_hydro_data,
     write_agri_data,
-    log_alert
+    log_alert,
+    get_all_subscribers,
+)
+from telegram_helper import (
+    build_alert_message,
+    send_telegram_message,
 )
 
 import pandas as pd
@@ -41,35 +46,36 @@ MONTH_AGO  = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
 
 
 # ============================================================
-# NOTIFICATION (extend this to email/Telegram later)
+# NOTIFICATION
 # ============================================================
 
-def send_notification(zone, alert_level, ndti_mean, date):
+def broadcast_alert(zone, alert_level, value, value_col, module_name, date, event_label=None):
     """
-    Send alert notification.
-    Currently prints to console (GitHub Actions captures this as a log).
-    Extend this to email or Telegram when client requires it.
+    Send the formatted alert to every subscriber in Supabase.
+    Returns the message text so it can also be logged in the alerts_log table.
     """
-    emoji = "🔴" if alert_level == "critical" else "🟡"
-    message = (
-        f"{emoji} SILTATION ALERT\n"
-        f"Zone      : {zone}\n"
-        f"Date      : {date}\n"
-        f"NDTI      : {ndti_mean}\n"
-        f"Status    : {alert_level.upper()}\n"
-        f"Action    : Check dredging schedule for this zone"
+    message = build_alert_message(
+        zone_name=zone,
+        index_value=value,
+        status=alert_level,
+        value_col=value_col,
+        module_name=module_name,
+        event_label=event_label,
     )
+
+    subscribers = get_all_subscribers()
+    if not subscribers:
+        print("   ⚠️  No subscribers found — alert not broadcast")
+    else:
+        sent = 0
+        for chat_id in subscribers:
+            ok, _ = send_telegram_message(chat_id, message)
+            if ok:
+                sent += 1
+        print(f"   📨 Telegram broadcast sent to {sent}/{len(subscribers)} subscribers")
 
     print(message)
     print("-" * 40)
-
-    # TODO: Add email/Telegram notification here
-    # import requests
-    # TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-    # CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
-    # requests.post(f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-    #               data={"chat_id": CHAT_ID, "text": message})
-
     return message
 
 
@@ -128,11 +134,13 @@ def run_daily_check():
 
         # Log alert if not normal
         if alert in ["warning", "critical"]:
-            message = send_notification(
+            message = broadcast_alert(
                 zone        = RESERVOIR_CONFIG["name"],
                 alert_level = alert,
-                ndti_mean   = ndti_stats["NDTI_mean"],
-                date        = TODAY
+                value       = ndti_stats["NDTI_mean"],
+                value_col   = "turbidity",
+                module_name = "Hydro",
+                date        = TODAY,
             )
             log_alert(
                 zone        = RESERVOIR_CONFIG["name"],
@@ -177,12 +185,20 @@ def run_daily_check():
         print(f"   Cloud cover  : {cloud_pct}%")
 
         if alert in ["warning", "critical"]:
+            message = broadcast_alert(
+                zone        = FARM_CONFIG["name"],
+                alert_level = alert,
+                value       = ndvi_stats["NDVI_mean"],
+                value_col   = "ndvi",
+                module_name = "Agriculture",
+                date        = TODAY,
+            )
             log_alert(
                 zone        = FARM_CONFIG["name"],
                 alert_level = alert,
                 date        = TODAY,
                 ndvi_mean   = ndvi_stats["NDVI_mean"],
-                message     = f"Vegetation stress detected. NDVI: {ndvi_stats['NDVI_mean']}"
+                message     = message,
             )
             alerts_triggered.append(alert)
 
