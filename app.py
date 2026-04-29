@@ -5,40 +5,26 @@ import pandas as pd
 import pydeck as pdk
 import altair as alt
 import datetime
-import json
-import requests
 
 from utils.theme import DARK, LIGHT
 from utils.styles import get_css
-
-# ──────────────────────────────────────────────────────────────
-# TELEGRAM
-# ──────────────────────────────────────────────────────────────
-
-def send_telegram(chat_id, message):
-    token = st.secrets.get("TELEGRAM_BOT_TOKEN", "")
-    if not token:
-        return False, "Bot token not configured in secrets."
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    response = requests.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"})
-    if response.status_code == 200:
-        return True, "Sent"
-    return False, response.json().get("description", "Unknown error")
-
-def build_alert_message(zone_name, index_value, status, value_col, module_name):
-    now = datetime.datetime.now().strftime("%d %b %Y, %H:%M")
-    index_label = "NDTI" if value_col == "turbidity" else "NDVI"
-    status_emoji = "🔴" if status == "critical" else "🟡"
-    status_label = "CRITICAL" if status == "critical" else "WARNING"
-    return (
-        f"<b>{status_emoji} {status_label} — {module_name} Zone Alert</b>\n\n"
-        f"<b>Zone:</b> {zone_name}\n"
-        f"<b>Time:</b> {now}\n"
-        f"<b>{index_label}:</b> {index_value}\n"
-        f"<b>Status:</b> {status_label}\n\n"
-        f"Please open the dashboard to review the latest readings and take action if needed.\n\n"
-        f"<i>TNB Siltation Monitor — EO Dashboard</i>"
-    )
+from src.database import (
+    read_hydro_data,
+    read_agri_data,
+    add_subscriber,
+    get_all_subscribers,
+)
+from src.telegram_helper import (
+    send_telegram_message,
+    send_test_alert,
+    send_subscription_welcome,
+    build_alert_message,
+)
+from src.gee_logic import (
+    initialize_gee,
+    RESERVOIR_CONFIG,
+    FARM_CONFIG,
+)
 
 
 # ──────────────────────────────────────────────────────────────
