@@ -22,6 +22,8 @@ from src.telegram_helper import (
 )
 from src.gee_logic import (
     initialize_gee,
+    get_turbidity_map,
+    get_ndvi_map,
     RESERVOIR_CONFIG,
     FARM_CONFIG,
 )
@@ -181,6 +183,30 @@ def load_agri_trends():
     pivot.columns.name = None
     pivot["date"] = pivot["date"].dt.strftime("%d %b %Y")
     return pivot
+
+@st.cache_resource(show_spinner=False)
+def load_ndti_image(lat, lon):
+    """Load and cache the live NDTI ee.Image from GEE for the turbidity map."""
+    from datetime import datetime
+    try:
+        initialize_gee()
+        ndti_image, area = get_turbidity_map(lat, lon, datetime.now().strftime("%Y-%m-%d"))
+        return ndti_image, area
+    except Exception:
+        return None, None
+
+
+@st.cache_resource(show_spinner=False)
+def load_ndvi_image(lat, lon):
+    """Load and cache the live NDVI ee.Image from GEE for the agriculture map."""
+    from datetime import datetime
+    try:
+        initialize_gee()
+        ndvi_image, area = get_ndvi_map(lat, lon, datetime.now().strftime("%Y-%m-%d"))
+        return ndvi_image, area
+    except Exception:
+        return None, None
+
 
 def get_all_alerts(zones_df, value_col):
     alerts = []
@@ -552,20 +578,121 @@ st.altair_chart(build_trend_chart(trends_df, value_col), use_container_width=Tru
 
 map_col, details_col = st.columns([2, 1])
 with map_col:
-    map_label = "Reservoir Locations — Peninsular Malaysia" if value_col == "turbidity" else "Agricultural Zones — Northern Malaysia"
-    st.markdown(f"""<div class="panel" style="margin-bottom:0;overflow:hidden;"><div class="panel-head">
-        <span class="panel-label">MAP: {map_label}</span><span class="meta-tag">Sentinel-2 L2A</span></div></div>""", unsafe_allow_html=True)
-    if not filtered_zones.empty:
-        st.pydeck_chart(build_map(filtered_zones, value_col), height=520)
+    import geemap.foliumap as gm
+    import folium
+    from streamlit_folium import st_folium
+
+    if value_col == "turbidity":
+        st.markdown(f"""<div class="panel" style="margin-bottom:0;overflow:hidden;"><div class="panel-head">
+            <span class="panel-label">MAP: Turbidity — Empangan Sultan Abu Bakar (NDTI)</span>
+            <span class="meta-tag">Sentinel-2 L2A · Live GEE</span></div></div>""", unsafe_allow_html=True)
+
+        ndti_image, _ = load_ndti_image(RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"])
+        geo_map = gm.Map(
+            center=[RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"]],
+            zoom=13, draw_control=False, measure_control=False,
+        )
+        if ndti_image is not None:
+            ndti_vis = {
+                "min": -0.1, "max": 0.35,
+                "palette": ["1a237e", "0288d1", "4dd0e1", "fff176", "ff8f00", "b71c1c"],
+            }
+            geo_map.addLayer(ndti_image, ndti_vis, "Turbidity (NDTI)")
+            geo_map.add_colorbar(ndti_vis, label="Turbidity Index (NDTI)")
+        else:
+            st.markdown(f"""<div style="padding:8px 16px;background:{t['amber']}22;border-left:3px solid {t['amber']};
+                font-size:12px;color:{t['text3']};margin-bottom:4px;">
+                Live imagery unavailable — no clear Sentinel-2 pass in the last 30 days</div>""",
+                unsafe_allow_html=True)
+
+        res_zones = all_zones[all_zones["name"] == RESERVOIR_CONFIG["name"]]
+        if not res_zones.empty:
+            row = res_zones.iloc[0]
+            icon_color = {"critical": "red", "warning": "orange", "normal": "green"}.get(row["status"], "blue")
+            popup_html = (
+                f"<div style='font-family:sans-serif;padding:6px;min-width:170px;'>"
+                f"<b style='font-size:13px;'>{row['name']}</b><br>"
+                f"<span style='color:#555;font-size:11px;'>NDTI: <b>{row['turbidity']}</b></span><br>"
+                f"<span style='color:#555;font-size:11px;'>NDWI: <b>{row['ndwi']}</b></span><br>"
+                f"<span style='color:#555;font-size:11px;'>Trend: {row['trend']}</span><br>"
+                f"<span style='font-size:11px;font-weight:600;color:{icon_color};'>{row['status'].upper()}</span>"
+                f"</div>"
+            )
+            geo_map.add_child(folium.Marker(
+                location=[RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"]],
+                popup=folium.Popup(popup_html, max_width=210),
+                tooltip=f"{RESERVOIR_CONFIG['name']} · NDTI {row['turbidity']} · {row['status'].upper()}",
+                icon=folium.Icon(color=icon_color, icon="tint", prefix="fa"),
+            ))
+
+        st_folium(geo_map, height=520, use_container_width=True)
+        st.markdown(f"""<div style="display:flex;gap:24px;justify-content:center;margin-top:10px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="width:12px;height:12px;border-radius:2px;background:#1a237e;display:inline-block;"></span>
+                <span style="font-size:11px;color:{t['text3']};">Low NDTI (clean)</span></div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="width:12px;height:12px;border-radius:2px;background:#fff176;display:inline-block;"></span>
+                <span style="font-size:11px;color:{t['text3']};">Medium</span></div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="width:12px;height:12px;border-radius:2px;background:#b71c1c;display:inline-block;"></span>
+                <span style="font-size:11px;color:{t['text3']};">High NDTI (turbid)</span></div>
+        </div>""", unsafe_allow_html=True)
+
     else:
-        st.markdown(f"""<div style="height:520px;display:flex;align-items:center;justify-content:center;
-            background:{t['bg_card']};border:1px solid {t['border']};border-top:none;border-radius:0 0 14px 14px;">
-            <span style="color:{t['text4']};font-size:13px;">No zones match the current filter</span></div>""", unsafe_allow_html=True)
-    st.markdown(f"""<div style="display:flex;gap:24px;justify-content:center;margin-top:10px;">
-        <div style="display:flex;align-items:center;gap:6px;"><span class="dot dot-g"></span><span style="font-size:11px;color:{t['text3']};">Normal</span></div>
-        <div style="display:flex;align-items:center;gap:6px;"><span class="dot dot-y"></span><span style="font-size:11px;color:{t['text3']};">Warning</span></div>
-        <div style="display:flex;align-items:center;gap:6px;"><span class="dot dot-r"></span><span style="font-size:11px;color:{t['text3']};">Critical</span></div>
-    </div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div class="panel" style="margin-bottom:0;overflow:hidden;"><div class="panel-head">
+            <span class="panel-label">MAP: Vegetation Health — Felda Jengka (NDVI)</span>
+            <span class="meta-tag">Sentinel-2 L2A · Live GEE</span></div></div>""", unsafe_allow_html=True)
+
+        ndvi_image, _ = load_ndvi_image(FARM_CONFIG["lat"], FARM_CONFIG["lon"])
+        geo_map = gm.Map(
+            center=[FARM_CONFIG["lat"], FARM_CONFIG["lon"]],
+            zoom=13, draw_control=False, measure_control=False,
+        )
+        if ndvi_image is not None:
+            ndvi_vis = {
+                "min": 0.1, "max": 0.85,
+                "palette": ["a50026", "f46d43", "fee08b", "d9ef8b", "66bd63", "1a9850", "006837"],
+            }
+            geo_map.addLayer(ndvi_image, ndvi_vis, "Vegetation Health (NDVI)")
+            geo_map.add_colorbar(ndvi_vis, label="Vegetation Index (NDVI)")
+        else:
+            st.markdown(f"""<div style="padding:8px 16px;background:{t['amber']}22;border-left:3px solid {t['amber']};
+                font-size:12px;color:{t['text3']};margin-bottom:4px;">
+                Live imagery unavailable — no clear Sentinel-2 pass in the last 30 days</div>""",
+                unsafe_allow_html=True)
+
+        farm_zones = all_zones[all_zones["name"] == FARM_CONFIG["name"]]
+        if not farm_zones.empty:
+            row = farm_zones.iloc[0]
+            icon_color = {"critical": "red", "warning": "orange", "normal": "green"}.get(row["status"], "blue")
+            popup_html = (
+                f"<div style='font-family:sans-serif;padding:6px;min-width:170px;'>"
+                f"<b style='font-size:13px;'>{row['name']}</b><br>"
+                f"<span style='color:#555;font-size:11px;'>NDVI: <b>{row['ndvi']}</b></span><br>"
+                f"<span style='color:#555;font-size:11px;'>NDRE: <b>{row['ndre']}</b></span><br>"
+                f"<span style='color:#555;font-size:11px;'>Trend: {row['trend']}</span><br>"
+                f"<span style='font-size:11px;font-weight:600;color:{icon_color};'>{row['status'].upper()}</span>"
+                f"</div>"
+            )
+            geo_map.add_child(folium.Marker(
+                location=[FARM_CONFIG["lat"], FARM_CONFIG["lon"]],
+                popup=folium.Popup(popup_html, max_width=210),
+                tooltip=f"{FARM_CONFIG['name']} · NDVI {row['ndvi']} · {row['status'].upper()}",
+                icon=folium.Icon(color=icon_color, icon="leaf", prefix="fa"),
+            ))
+
+        st_folium(geo_map, height=520, use_container_width=True)
+        st.markdown(f"""<div style="display:flex;gap:24px;justify-content:center;margin-top:10px;">
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="width:12px;height:12px;border-radius:2px;background:#a50026;display:inline-block;"></span>
+                <span style="font-size:11px;color:{t['text3']};">Low NDVI (stressed)</span></div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="width:12px;height:12px;border-radius:2px;background:#fee08b;display:inline-block;"></span>
+                <span style="font-size:11px;color:{t['text3']};">Medium</span></div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="width:12px;height:12px;border-radius:2px;background:#006837;display:inline-block;"></span>
+                <span style="font-size:11px;color:{t['text3']};">High NDVI (healthy)</span></div>
+        </div>""", unsafe_allow_html=True)
 
 with details_col:
     st.markdown(f"""<div class="panel"><div class="panel-body"><div class="panel-label" style="margin-bottom:16px;">DISTRIBUTION: Zone Health</div>""", unsafe_allow_html=True)

@@ -280,6 +280,32 @@ def get_turbidity_map(lat, lon, date_str, buffer_m=2000):
 
 
 
+# LIVE MAP TILE — NDVI (for agriculture module in dashboard)
+
+def get_ndvi_map(lat, lon, date_str, buffer_m=3000):
+    """
+    Generate live NDVI map tile for geemap.
+    Cached — first call processes, subsequent calls instant.
+    """
+    from datetime import datetime, timedelta
+
+    area = (
+        ee.Geometry.Point([lon, lat])
+        .buffer(buffer_m)
+        .bounds()
+    )
+
+    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+    start    = (date_obj - timedelta(days=15)).strftime("%Y-%m-%d")
+    end      = (date_obj + timedelta(days=15)).strftime("%Y-%m-%d")
+
+    image, _, _ = load_sentinel2(area, start, end, cloud_threshold=30)
+    if image is None:
+        return None, area
+
+    return compute_ndvi(image), area
+
+
 # FULL PIPELINE RUNNER — 12 MONTHS
 
 def run_full_pipeline(months_back=12):

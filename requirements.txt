@@ -4,6 +4,9 @@ streamlit
 pandas
 folium
 streamlit-folium
-pycryptodome
 supabase
+altair
+pydeck
+diskcache
+requests
 
