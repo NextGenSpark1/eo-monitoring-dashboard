@@ -5,6 +5,7 @@ import pandas as pd
 import pydeck as pdk
 import altair as alt
 import datetime
+import time
 
 from utils.theme import DARK, LIGHT
 from utils.styles import get_css
@@ -27,11 +28,12 @@ from src.gee_logic import (
     RESERVOIR_CONFIG,
     FARM_CONFIG,
 )
-
+from src.dynamic_zone import render_search_ui
 
 # ──────────────────────────────────────────────────────────────
 # PAGE CONFIG
 # ──────────────────────────────────────────────────────────────
+
 st.set_page_config(
     page_title="EO Monitoring Dashboard",
     page_icon="🛰️",
@@ -67,6 +69,10 @@ t = LIGHT if theme_choice == "Light" else DARK
 # ──────────────────────────────────────────────────────────────
 st.markdown(get_css(t, theme_choice), unsafe_allow_html=True)
 
+# DASHBOARD 
+st.title("TNB Siltation Monitor")
+st.caption("Empangan Sultan Abu Bakar — Real-Time Turbidity & Vegetation Monitoring")
+
 
 # ──────────────────────────────────────────────────────────────
 # DATA LOADING — CSV + GeoJSON
@@ -85,7 +91,6 @@ ZONE_COORDS = {
     },
 }
 
-
 def compute_trend(sorted_values):
     if len(sorted_values) < 2:
         return "stable"
@@ -95,6 +100,16 @@ def compute_trend(sorted_values):
     elif current < previous - 0.01:
         return "falling"
     return "stable"
+
+
+# AUTO-REFRESH
+REFRESH_INTERVAL = 300  
+if "last_refresh" not in st.session_state:
+    st.session_state["last_refresh"] = time.time()
+
+time_since = time.time() - st.session_state["last_refresh"]
+time_left  = max(0, int(REFRESH_INTERVAL - time_since))
+
 
 
 @st.cache_data(ttl=300)
@@ -132,7 +147,6 @@ def load_agri_data():
     df = read_agri_data()
     if df.empty:
         return pd.DataFrame()
-
     df = df.sort_values("date")
     result = []
     for zone_name, group in df.groupby("zone"):
@@ -153,6 +167,22 @@ def load_agri_data():
             "ndvi_max": round(latest_row["ndvi_max"], 4) if pd.notna(latest_row.get("ndvi_max")) else 0.0,
         })
     return pd.DataFrame(result)
+
+
+# Show countdown and auto-trigger rerun when timer hits 0
+st.caption(f" Auto-refreshing in {time_left // 60}m {time_left % 60}s")
+if time_since >= REFRESH_INTERVAL:
+    st.session_state["last_refresh"] = time.time()
+    time.sleep(0.5)   # brief pause so the user sees the update
+    st.rerun()
+
+# Page header
+# st.title("💧 TNB Siltation Monitor") # Moved up
+# st.caption("Empangan Sultan Abu Bakar · Felda Jengka — Real-Time Monitoring") # Moved up
+
+# Verify both zones loading correctly
+
+
 
 
 @st.cache_data(ttl=300)
@@ -394,34 +424,36 @@ def build_trend_chart(trends_df, value_col):
 with st.sidebar:
     st.markdown("---")
     st.markdown(f'<p class="sb-label">Monitoring Module</p>', unsafe_allow_html=True)
-    view_choice = st.radio("Module", ["Hydro Reservoir", "Agriculture"], label_visibility="collapsed")
+    view_choice = st.radio("Module", ["Hydro Reservoir", "Agriculture", "Search Location"], label_visibility="collapsed")
 
-    st.markdown("---")
-    st.markdown(f'<p class="sb-label">Status Filter</p>', unsafe_allow_html=True)
-    show_normal   = st.checkbox("Normal",   value=True)
-    show_warning  = st.checkbox("Warning",  value=True)
-    show_critical = st.checkbox("Critical", value=True)
-    active_statuses = []
-    if show_normal:   active_statuses.append("normal")
-    if show_warning:  active_statuses.append("warning")
-    if show_critical: active_statuses.append("critical")
 
-    st.markdown("---")
-    st.markdown(f'<p class="sb-label">Thresholds</p>', unsafe_allow_html=True)
-    if view_choice == "Hydro Reservoir":
-        warning_threshold  = st.slider("Warning level (NDTI >=)", 0.0, 1.0, 0.40, 0.05, key="hydro_warn")
-        critical_threshold = st.slider("Critical level (NDTI >=)", 0.0, 1.0, 0.60, 0.05, key="hydro_crit")
-        st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
-            <span style="color:{t['green']};">●</span> Normal: &lt; {warning_threshold:.2f}<br>
-            <span style="color:{t['amber']};">●</span> Warning: {warning_threshold:.2f} – {critical_threshold:.2f}<br>
-            <span style="color:{t['red']};">●</span> Critical: ≥ {critical_threshold:.2f}</div>""", unsafe_allow_html=True)
-    else:
-        warning_threshold  = st.slider("Warning level (NDVI <)", 0.0, 1.0, 0.55, 0.05, key="agri_warn")
-        critical_threshold = st.slider("Critical level (NDVI <)", 0.0, 1.0, 0.40, 0.05, key="agri_crit")
-        st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
-            <span style="color:{t['green']};">●</span> Normal: &gt; {warning_threshold:.2f}<br>
-            <span style="color:{t['amber']};">●</span> Warning: {critical_threshold:.2f} – {warning_threshold:.2f}<br>
-            <span style="color:{t['red']};">●</span> Critical: &lt; {critical_threshold:.2f}</div>""", unsafe_allow_html=True)
+    if view_choice != "Search Location":
+        st.markdown("---")
+        st.markdown(f'<p class="sb-label">Status Filter</p>', unsafe_allow_html=True)
+        show_normal   = st.checkbox("Normal",   value=True)
+        show_warning  = st.checkbox("Warning",  value=True)
+        show_critical = st.checkbox("Critical", value=True)
+        active_statuses = []
+        if show_normal:   active_statuses.append("normal")
+        if show_warning:  active_statuses.append("warning")
+        if show_critical: active_statuses.append("critical")
+
+        st.markdown("---")
+        st.markdown(f'<p class="sb-label">Thresholds</p>', unsafe_allow_html=True)
+        if view_choice == "Hydro Reservoir":
+            warning_threshold  = st.slider("Warning level (NDTI >=)", 0.0, 1.0, 0.40, 0.05, key="hydro_warn")
+            critical_threshold = st.slider("Critical level (NDTI >=)", 0.0, 1.0, 0.60, 0.05, key="hydro_crit")
+            st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
+                <span style="color:{t['green']};">●</span> Normal: &lt; {warning_threshold:.2f}<br>
+                <span style="color:{t['amber']};">●</span> Warning: {warning_threshold:.2f} – {critical_threshold:.2f}<br>
+                <span style="color:{t['red']};">●</span> Critical: ≥ {critical_threshold:.2f}</div>""", unsafe_allow_html=True)
+        elif view_choice == "Agriculture":
+            warning_threshold  = st.slider("Warning level (NDVI <)", 0.0, 1.0, 0.55, 0.05, key="agri_warn")
+            critical_threshold = st.slider("Critical level (NDVI <)", 0.0, 1.0, 0.40, 0.05, key="agri_crit")
+            st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
+                <span style="color:{t['green']};">●</span> Normal: &gt; {warning_threshold:.2f}<br>
+                <span style="color:{t['amber']};">●</span> Warning: {critical_threshold:.2f} – {warning_threshold:.2f}<br>
+                <span style="color:{t['red']};">●</span> Critical: &lt; {critical_threshold:.2f}</div>""", unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown(f'<p class="sb-label">Alert Subscription</p>', unsafe_allow_html=True)
@@ -474,279 +506,269 @@ with st.sidebar:
         <strong style="color:{t['text3']};">Version:</strong> Prototype v1.0</div>""", unsafe_allow_html=True)
 
 
-# ══════════════════════════════════════════════════════════════
-# LOAD & FILTER DATA
-# ══════════════════════════════════════════════════════════════
-
-if view_choice == "Hydro Reservoir":
-    all_zones  = classify_hydro_status(load_hydro_data(), warning_threshold, critical_threshold)
-    trends_df  = load_hydro_trends()
-    value_col  = "turbidity"
-    module_name = "Turbidity"
-    threshold_note = "Higher = worse water quality"
+if view_choice == "Search Location":
+    st.markdown("")
+    render_search_ui()
 else:
-    all_zones  = classify_agri_status(load_agri_data(), warning_threshold, critical_threshold)
-    trends_df  = load_agri_trends()
-    value_col  = "ndvi"
-    module_name = "NDVI"
-    threshold_note = "Lower = vegetation stress"
+    # ══════════════════════════════════════════════════════════════
+    # LOAD & FILTER DATA
+    # ══════════════════════════════════════════════════════════════
 
-filtered_zones = all_zones[all_zones["status"].isin(active_statuses)].copy()
-total_zones    = len(all_zones)
-filtered_count = len(filtered_zones)
-num_critical   = len(filtered_zones[filtered_zones["status"] == "critical"])
-num_warning    = len(filtered_zones[filtered_zones["status"] == "warning"])
-num_normal     = len(filtered_zones[filtered_zones["status"] == "normal"])
-avg_value      = round(filtered_zones[value_col].mean(), 2) if not filtered_zones.empty else 0
-filtered_alerts = [a for a in get_all_alerts(all_zones, value_col) if a["status"] in active_statuses]
-
-# Auto-send alerts to subscribers when threshold is breached
-if filtered_alerts:
-    subscribers = get_all_subscribers()
-    if subscribers:
-        sent_state_key = f"sent_keys_{value_col}"
-        if sent_state_key not in st.session_state:
-            st.session_state[sent_state_key] = set()
-        current_alert_keys = {f"{alert['zone']}_{alert['severity']}" for alert in filtered_alerts}
-        new_alerts = [
-            alert for alert in filtered_alerts
-            if f"{alert['zone']}_{alert['severity']}" not in st.session_state[sent_state_key]
-        ]
-        for alert in new_alerts:
-            zone_row = all_zones[all_zones["name"] == alert["zone"]]
-            index_value = round(zone_row[value_col].iloc[0], 4) if not zone_row.empty else "N/A"
-            alert_message = build_alert_message(
-                alert["zone"], str(index_value), alert["severity"], value_col, module_name
-            )
-            for subscriber_chat_id in subscribers:
-                send_telegram_message(subscriber_chat_id, alert_message)
-        st.session_state[sent_state_key] = current_alert_keys
-else:
-    st.session_state[f"sent_keys_{value_col}"] = set()
-
-
-# ══════════════════════════════════════════════════════════════
-# HEADER
-# ══════════════════════════════════════════════════════════════
-
-header_col, live_col = st.columns([3, 1])
-with header_col:
-    st.markdown(f"""<div class="dash-header"><div class="dash-logo">NS</div><div>
-        <p class="dash-title">EO Monitoring Dashboard</p>
-        <p class="dash-sub">NextGen Spark — Sentinel-2 Analytics Platform</p></div></div>""", unsafe_allow_html=True)
-with live_col:
-    st.markdown(f"""<div style="display:flex;justify-content:flex-end;align-items:center;gap:14px;padding-top:16px;">
-        <span class="meta-tag">Last update: {datetime.datetime.now().strftime("%d %b %Y, %H:%M")}</span>
-        <span class="live-pill"><span class="live-dot-anim"></span>LIVE</span></div>""", unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════════════════════
-# KPI CARDS
-# ══════════════════════════════════════════════════════════════
-
-kpi_index_label = "NDTI Index" if value_col == "turbidity" else "Vegetation Index"
-critical_badge  = '<span class="kpi-tag tag-red">Immediate attention</span>'  if num_critical > 0 else '<span class="kpi-tag tag-green">All clear</span>'
-warning_badge   = '<span class="kpi-tag tag-amber">Under observation</span>' if num_warning  > 0 else '<span class="kpi-tag tag-green">All clear</span>'
-
-st.markdown(f"""
-<div class="kpi-row">
-    <div class="kpi"><div class="kpi-accent" style="background:linear-gradient(90deg,{t['blue']},{t['green']});"></div>
-        <div class="kpi-label">Avg {module_name}</div><div class="kpi-val">{avg_value}</div><span class="kpi-tag tag-blue">{kpi_index_label}</span></div>
-    <div class="kpi {'kpi-glow' if num_critical>0 else ''}"><div class="kpi-accent" style="background:{t['red']};"></div>
-        <div class="kpi-label">Critical Zones</div><div class="kpi-val">{num_critical}</div>{critical_badge}</div>
-    <div class="kpi"><div class="kpi-accent" style="background:{t['amber']};"></div>
-        <div class="kpi-label">Warning Zones</div><div class="kpi-val">{num_warning}</div>{warning_badge}</div>
-    <div class="kpi"><div class="kpi-accent" style="background:{t['green']};"></div>
-        <div class="kpi-label">Normal Zones</div><div class="kpi-val">{num_normal}</div><span class="kpi-tag tag-green">Within safe range</span></div>
-</div>""", unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════════════════════
-# TREND CHART
-# ══════════════════════════════════════════════════════════════
-
-st.markdown("")
-st.markdown(f"""<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-    <span class="panel-label" style="margin:0;">TREND: {module_name} — Historical Readings</span>
-    <span class="note-box">{threshold_note}</span></div>""", unsafe_allow_html=True)
-st.altair_chart(build_trend_chart(trends_df, value_col), use_container_width=True)
-
-
-# ══════════════════════════════════════════════════════════════
-# MAP + ZONE DETAILS
-# ══════════════════════════════════════════════════════════════
-
-map_col, details_col = st.columns([2, 1])
-with map_col:
-    import geemap.foliumap as gm
-    import folium
-    from streamlit_folium import st_folium
-
-    if value_col == "turbidity":
-        st.markdown(f"""<div class="panel" style="margin-bottom:0;overflow:hidden;"><div class="panel-head">
-            <span class="panel-label">MAP: Turbidity — Empangan Sultan Abu Bakar (NDTI)</span>
-            <span class="meta-tag">Sentinel-2 L2A · Live GEE</span></div></div>""", unsafe_allow_html=True)
-
-        ndti_image, _ = load_ndti_image(RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"])
-        geo_map = gm.Map(
-            center=[RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"]],
-            zoom=13, draw_control=False, measure_control=False,
-        )
-        if ndti_image is not None:
-            ndti_vis = {
-                "min": -0.1, "max": 0.35,
-                "palette": ["1a237e", "0288d1", "4dd0e1", "fff176", "ff8f00", "b71c1c"],
-            }
-            geo_map.addLayer(ndti_image, ndti_vis, "Turbidity (NDTI)")
-            geo_map.add_colorbar(ndti_vis, label="Turbidity Index (NDTI)")
-        else:
-            st.markdown(f"""<div style="padding:8px 16px;background:{t['amber']}22;border-left:3px solid {t['amber']};
-                font-size:12px;color:{t['text3']};margin-bottom:4px;">
-                Live imagery unavailable — no clear Sentinel-2 pass in the last 30 days</div>""",
-                unsafe_allow_html=True)
-
-        res_zones = all_zones[all_zones["name"] == RESERVOIR_CONFIG["name"]]
-        if not res_zones.empty:
-            row = res_zones.iloc[0]
-            icon_color = {"critical": "red", "warning": "orange", "normal": "green"}.get(row["status"], "blue")
-            popup_html = (
-                f"<div style='font-family:sans-serif;padding:6px;min-width:170px;'>"
-                f"<b style='font-size:13px;'>{row['name']}</b><br>"
-                f"<span style='color:#555;font-size:11px;'>NDTI: <b>{row['turbidity']}</b></span><br>"
-                f"<span style='color:#555;font-size:11px;'>NDWI: <b>{row['ndwi']}</b></span><br>"
-                f"<span style='color:#555;font-size:11px;'>Trend: {row['trend']}</span><br>"
-                f"<span style='font-size:11px;font-weight:600;color:{icon_color};'>{row['status'].upper()}</span>"
-                f"</div>"
-            )
-            geo_map.add_child(folium.Marker(
-                location=[RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"]],
-                popup=folium.Popup(popup_html, max_width=210),
-                tooltip=f"{RESERVOIR_CONFIG['name']} · NDTI {row['turbidity']} · {row['status'].upper()}",
-                icon=folium.Icon(color=icon_color, icon="tint", prefix="fa"),
-            ))
-
-        st_folium(geo_map, height=520, use_container_width=True)
-        st.markdown(f"""<div style="display:flex;gap:24px;justify-content:center;margin-top:10px;">
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="width:12px;height:12px;border-radius:2px;background:#1a237e;display:inline-block;"></span>
-                <span style="font-size:11px;color:{t['text3']};">Low NDTI (clean)</span></div>
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="width:12px;height:12px;border-radius:2px;background:#fff176;display:inline-block;"></span>
-                <span style="font-size:11px;color:{t['text3']};">Medium</span></div>
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="width:12px;height:12px;border-radius:2px;background:#b71c1c;display:inline-block;"></span>
-                <span style="font-size:11px;color:{t['text3']};">High NDTI (turbid)</span></div>
-        </div>""", unsafe_allow_html=True)
-
+    if view_choice == "Hydro Reservoir":
+        all_zones  = classify_hydro_status(load_hydro_data(), warning_threshold, critical_threshold)
+        trends_df  = load_hydro_trends()
+        value_col  = "turbidity"
+        module_name = "Turbidity"
+        threshold_note = "Higher = worse water quality"
     else:
-        st.markdown(f"""<div class="panel" style="margin-bottom:0;overflow:hidden;"><div class="panel-head">
-            <span class="panel-label">MAP: Vegetation Health — Felda Jengka (NDVI)</span>
-            <span class="meta-tag">Sentinel-2 L2A · Live GEE</span></div></div>""", unsafe_allow_html=True)
+        all_zones  = classify_agri_status(load_agri_data(), warning_threshold, critical_threshold)
+        trends_df  = load_agri_trends()
+        value_col  = "ndvi"
+        module_name = "NDVI"
+        threshold_note = "Lower = vegetation stress"
 
-        ndvi_image, _ = load_ndvi_image(FARM_CONFIG["lat"], FARM_CONFIG["lon"])
-        geo_map = gm.Map(
-            center=[FARM_CONFIG["lat"], FARM_CONFIG["lon"]],
-            zoom=13, draw_control=False, measure_control=False,
-        )
-        if ndvi_image is not None:
-            ndvi_vis = {
-                "min": 0.1, "max": 0.85,
-                "palette": ["a50026", "f46d43", "fee08b", "d9ef8b", "66bd63", "1a9850", "006837"],
-            }
-            geo_map.addLayer(ndvi_image, ndvi_vis, "Vegetation Health (NDVI)")
-            geo_map.add_colorbar(ndvi_vis, label="Vegetation Index (NDVI)")
-        else:
-            st.markdown(f"""<div style="padding:8px 16px;background:{t['amber']}22;border-left:3px solid {t['amber']};
-                font-size:12px;color:{t['text3']};margin-bottom:4px;">
-                Live imagery unavailable — no clear Sentinel-2 pass in the last 30 days</div>""",
-                unsafe_allow_html=True)
+    filtered_zones = all_zones[all_zones["status"].isin(active_statuses)].copy()
+    total_zones    = len(all_zones)
+    filtered_count = len(filtered_zones)
+    num_critical   = len(filtered_zones[filtered_zones["status"] == "critical"])
+    num_warning    = len(filtered_zones[filtered_zones["status"] == "warning"])
+    num_normal     = len(filtered_zones[filtered_zones["status"] == "normal"])
+    avg_value      = round(filtered_zones[value_col].mean(), 2) if not filtered_zones.empty else 0
+    filtered_alerts = [a for a in get_all_alerts(all_zones, value_col) if a["status"] in active_statuses]
 
-        farm_zones = all_zones[all_zones["name"] == FARM_CONFIG["name"]]
-        if not farm_zones.empty:
-            row = farm_zones.iloc[0]
-            icon_color = {"critical": "red", "warning": "orange", "normal": "green"}.get(row["status"], "blue")
-            popup_html = (
-                f"<div style='font-family:sans-serif;padding:6px;min-width:170px;'>"
-                f"<b style='font-size:13px;'>{row['name']}</b><br>"
-                f"<span style='color:#555;font-size:11px;'>NDVI: <b>{row['ndvi']}</b></span><br>"
-                f"<span style='color:#555;font-size:11px;'>NDRE: <b>{row['ndre']}</b></span><br>"
-                f"<span style='color:#555;font-size:11px;'>Trend: {row['trend']}</span><br>"
-                f"<span style='font-size:11px;font-weight:600;color:{icon_color};'>{row['status'].upper()}</span>"
-                f"</div>"
-            )
-            geo_map.add_child(folium.Marker(
-                location=[FARM_CONFIG["lat"], FARM_CONFIG["lon"]],
-                popup=folium.Popup(popup_html, max_width=210),
-                tooltip=f"{FARM_CONFIG['name']} · NDVI {row['ndvi']} · {row['status'].upper()}",
-                icon=folium.Icon(color=icon_color, icon="leaf", prefix="fa"),
-            ))
+    # Auto-send alerts to subscribers when threshold is breached
+    if filtered_alerts:
+        subscribers = get_all_subscribers()
+        if subscribers:
+            sent_state_key = f"sent_keys_{value_col}"
+            if sent_state_key not in st.session_state:
+                st.session_state[sent_state_key] = set()
+            current_alert_keys = {f"{alert['zone']}_{alert['severity']}" for alert in filtered_alerts}
+            new_alerts = [
+                alert for alert in filtered_alerts
+                if f"{alert['zone']}_{alert['severity']}" not in st.session_state[sent_state_key]
+            ]
+            for alert in new_alerts:
+                zone_row = all_zones[all_zones["name"] == alert["zone"]]
+                index_value = round(zone_row[value_col].iloc[0], 4) if not zone_row.empty else "N/A"
+                alert_message = build_alert_message(
+                    alert["zone"], str(index_value), alert["severity"], value_col, module_name
+                )
+                for subscriber_chat_id in subscribers:
+                    send_telegram_message(subscriber_chat_id, alert_message)
+            st.session_state[sent_state_key] = current_alert_keys
+    else:
+        st.session_state[f"sent_keys_{value_col}"] = set()
 
-        st_folium(geo_map, height=520, use_container_width=True)
-        st.markdown(f"""<div style="display:flex;gap:24px;justify-content:center;margin-top:10px;">
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="width:12px;height:12px;border-radius:2px;background:#a50026;display:inline-block;"></span>
-                <span style="font-size:11px;color:{t['text3']};">Low NDVI (stressed)</span></div>
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="width:12px;height:12px;border-radius:2px;background:#fee08b;display:inline-block;"></span>
-                <span style="font-size:11px;color:{t['text3']};">Medium</span></div>
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="width:12px;height:12px;border-radius:2px;background:#006837;display:inline-block;"></span>
-                <span style="font-size:11px;color:{t['text3']};">High NDVI (healthy)</span></div>
-        </div>""", unsafe_allow_html=True)
 
-with details_col:
-    st.markdown(f"""<div class="panel"><div class="panel-body"><div class="panel-label" style="margin-bottom:16px;">DISTRIBUTION: Zone Health</div>""", unsafe_allow_html=True)
-    for label, count, color in [("Normal", num_normal, t['green']), ("Warning", num_warning, t['amber']), ("Critical", num_critical, t['red'])]:
-        percentage = round((count / total_zones) * 100) if total_zones > 0 else 0
-        st.markdown(f"""<div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-size:12.5px;color:{t['text2']};">{label}</span>
-            <span style="font-size:12.5px;color:{color};font-weight:600;font-family:'JetBrains Mono',monospace;">{count} <span style="color:{t['text4']};font-weight:400;">({percentage}%)</span></span></div>
-        <div class="dbar-track"><div class="dbar-fill" style="width:{percentage}%;background:{color};"></div></div>""", unsafe_allow_html=True)
-    st.markdown(f"""<div style="border-top:1px solid {t['border']};padding-top:14px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;">
-            <span style="font-size:11px;color:{t['text4']};">Showing / Total</span>
-            <span style="font-size:24px;font-weight:800;color:{t['text1']};font-family:'JetBrains Mono',monospace;">{filtered_count}<span style="font-size:14px;color:{t['text4']};font-weight:400;">/{total_zones}</span></span>
-        </div></div></div>""", unsafe_allow_html=True)
+    # ══════════════════════════════════════════════════════════════
+    # KPI CARDS
+    # ══════════════════════════════════════════════════════════════
+
+    kpi_index_label = "NDTI Index" if value_col == "turbidity" else "Vegetation Index"
+    critical_badge  = '<span class="kpi-tag tag-red">Immediate attention</span>'  if num_critical > 0 else '<span class="kpi-tag tag-green">All clear</span>'
+    warning_badge   = '<span class="kpi-tag tag-amber">Under observation</span>' if num_warning  > 0 else '<span class="kpi-tag tag-green">All clear</span>'
+
+    st.markdown(f"""
+    <div class="kpi-row">
+        <div class="kpi"><div class="kpi-accent" style="background:linear-gradient(90deg,{t['blue']},{t['green']});"></div>
+            <div class="kpi-label">Avg {module_name}</div><div class="kpi-val">{avg_value}</div><span class="kpi-tag tag-blue">{kpi_index_label}</span></div>
+        <div class="kpi {'kpi-glow' if num_critical>0 else ''}"><div class="kpi-accent" style="background:{t['red']};"></div>
+            <div class="kpi-label">Critical Zones</div><div class="kpi-val">{num_critical}</div>{critical_badge}</div>
+        <div class="kpi"><div class="kpi-accent" style="background:{t['amber']};"></div>
+            <div class="kpi-label">Warning Zones</div><div class="kpi-val">{num_warning}</div>{warning_badge}</div>
+        <div class="kpi"><div class="kpi-accent" style="background:{t['green']};"></div>
+            <div class="kpi-label">Normal Zones</div><div class="kpi-val">{num_normal}</div><span class="kpi-tag tag-green">Within safe range</span></div>
+    </div>""", unsafe_allow_html=True)
+
+
+    # ══════════════════════════════════════════════════════════════
+    # TREND CHART
+    # ══════════════════════════════════════════════════════════════
 
     st.markdown("")
-    st.markdown(f'<p class="sb-label" style="margin-top:8px;">Zone Details</p>', unsafe_allow_html=True)
-    if filtered_zones.empty:
-        st.markdown(f'<div style="color:{t["text4"]};font-size:12px;padding:12px 0;">No zones to display</div>', unsafe_allow_html=True)
+    st.markdown(f"""<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <span class="panel-label" style="margin:0;">TREND: {module_name} — Historical Readings</span>
+        <span class="note-box">{threshold_note}</span></div>""", unsafe_allow_html=True)
+    st.altair_chart(build_trend_chart(trends_df, value_col), use_container_width=True)
+
+
+    # ══════════════════════════════════════════════════════════════
+    # MAP + ZONE DETAILS
+    # ══════════════════════════════════════════════════════════════
+
+    map_col, details_col = st.columns([2, 1])
+    with map_col:
+        import geemap.foliumap as gm
+        import folium
+        from streamlit_folium import st_folium
+
+        if value_col == "turbidity":
+            st.markdown(f"""<div class="panel" style="margin-bottom:0;overflow:hidden;"><div class="panel-head">
+                <span class="panel-label">MAP: Turbidity — Empangan Sultan Abu Bakar (NDTI)</span>
+                <span class="meta-tag">Sentinel-2 L2A · Live GEE</span></div></div>""", unsafe_allow_html=True)
+
+            ndti_image, _ = load_ndti_image(RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"])
+            geo_map = gm.Map(
+                center=[RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"]],
+                zoom=13, draw_control=False, measure_control=False,
+            )
+            if ndti_image is not None:
+                ndti_vis = {
+                    "min": -0.1, "max": 0.35,
+                    "palette": ["1a237e", "0288d1", "4dd0e1", "fff176", "ff8f00", "b71c1c"],
+                }
+                geo_map.addLayer(ndti_image, ndti_vis, "Turbidity (NDTI)")
+                geo_map.add_colorbar(ndti_vis, label="Turbidity Index (NDTI)")
+            else:
+                st.markdown(f"""<div style="padding:8px 16px;background:{t['amber']}22;border-left:3px solid {t['amber']};
+                    font-size:12px;color:{t['text3']};margin-bottom:4px;">
+                    Live imagery unavailable — no clear Sentinel-2 pass in the last 30 days</div>""",
+                    unsafe_allow_html=True)
+
+            res_zones = all_zones[all_zones["name"] == RESERVOIR_CONFIG["name"]]
+            if not res_zones.empty:
+                row = res_zones.iloc[0]
+                icon_color = {"critical": "red", "warning": "orange", "normal": "green"}.get(row["status"], "blue")
+                popup_html = (
+                    f"<div style='font-family:sans-serif;padding:6px;min-width:170px;'>"
+                    f"<b style='font-size:13px;'>{row['name']}</b><br>"
+                    f"<span style='color:#555;font-size:11px;'>NDTI: <b>{row['turbidity']}</b></span><br>"
+                    f"<span style='color:#555;font-size:11px;'>NDWI: <b>{row['ndwi']}</b></span><br>"
+                    f"<span style='color:#555;font-size:11px;'>Trend: {row['trend']}</span><br>"
+                    f"<span style='font-size:11px;font-weight:600;color:{icon_color};'>{row['status'].upper()}</span>"
+                    f"</div>"
+                )
+                geo_map.add_child(folium.Marker(
+                    location=[RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"]],
+                    popup=folium.Popup(popup_html, max_width=210),
+                    tooltip=f"{RESERVOIR_CONFIG['name']} · NDTI {row['turbidity']} · {row['status'].upper()}",
+                    icon=folium.Icon(color=icon_color, icon="tint", prefix="fa"),
+                ))
+
+            st_folium(geo_map, height=520, use_container_width=True)
+            st.markdown(f"""<div style="display:flex;gap:24px;justify-content:center;margin-top:10px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="width:12px;height:12px;border-radius:2px;background:#1a237e;display:inline-block;"></span>
+                    <span style="font-size:11px;color:{t['text3']};">Low NDTI (clean)</span></div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="width:12px;height:12px;border-radius:2px;background:#fff176;display:inline-block;"></span>
+                    <span style="font-size:11px;color:{t['text3']};">Medium</span></div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="width:12px;height:12px;border-radius:2px;background:#b71c1c;display:inline-block;"></span>
+                    <span style="font-size:11px;color:{t['text3']};">High NDTI (turbid)</span></div>
+            </div>""", unsafe_allow_html=True)
+
+        else:
+            st.markdown(f"""<div class="panel" style="margin-bottom:0;overflow:hidden;"><div class="panel-head">
+                <span class="panel-label">MAP: Vegetation Health — Felda Jengka (NDVI)</span>
+                <span class="meta-tag">Sentinel-2 L2A · Live GEE</span></div></div>""", unsafe_allow_html=True)
+
+            ndvi_image, _ = load_ndvi_image(FARM_CONFIG["lat"], FARM_CONFIG["lon"])
+            geo_map = gm.Map(
+                center=[FARM_CONFIG["lat"], FARM_CONFIG["lon"]],
+                zoom=13, draw_control=False, measure_control=False,
+            )
+            if ndvi_image is not None:
+                ndvi_vis = {
+                    "min": 0.1, "max": 0.85,
+                    "palette": ["a50026", "f46d43", "fee08b", "d9ef8b", "66bd63", "1a9850", "006837"],
+                }
+                geo_map.addLayer(ndvi_image, ndvi_vis, "Vegetation Health (NDVI)")
+                geo_map.add_colorbar(ndvi_vis, label="Vegetation Index (NDVI)")
+            else:
+                st.markdown(f"""<div style="padding:8px 16px;background:{t['amber']}22;border-left:3px solid {t['amber']};
+                    font-size:12px;color:{t['text3']};margin-bottom:4px;">
+                    Live imagery unavailable — no clear Sentinel-2 pass in the last 30 days</div>""",
+                    unsafe_allow_html=True)
+
+            farm_zones = all_zones[all_zones["name"] == FARM_CONFIG["name"]]
+            if not farm_zones.empty:
+                row = farm_zones.iloc[0]
+                icon_color = {"critical": "red", "warning": "orange", "normal": "green"}.get(row["status"], "blue")
+                popup_html = (
+                    f"<div style='font-family:sans-serif;padding:6px;min-width:170px;'>"
+                    f"<b style='font-size:13px;'>{row['name']}</b><br>"
+                    f"<span style='color:#555;font-size:11px;'>NDVI: <b>{row['ndvi']}</b></span><br>"
+                    f"<span style='color:#555;font-size:11px;'>NDRE: <b>{row['ndre']}</b></span><br>"
+                    f"<span style='color:#555;font-size:11px;'>Trend: {row['trend']}</span><br>"
+                    f"<span style='font-size:11px;font-weight:600;color:{icon_color};'>{row['status'].upper()}</span>"
+                    f"</div>"
+                )
+                geo_map.add_child(folium.Marker(
+                    location=[FARM_CONFIG["lat"], FARM_CONFIG["lon"]],
+                    popup=folium.Popup(popup_html, max_width=210),
+                    tooltip=f"{FARM_CONFIG['name']} · NDVI {row['ndvi']} · {row['status'].upper()}",
+                    icon=folium.Icon(color=icon_color, icon="leaf", prefix="fa"),
+                ))
+
+            st_folium(geo_map, height=520, use_container_width=True)
+            st.markdown(f"""<div style="display:flex;gap:24px;justify-content:center;margin-top:10px;">
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="width:12px;height:12px;border-radius:2px;background:#a50026;display:inline-block;"></span>
+                    <span style="font-size:11px;color:{t['text3']};">Low NDVI (stressed)</span></div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="width:12px;height:12px;border-radius:2px;background:#fee08b;display:inline-block;"></span>
+                    <span style="font-size:11px;color:{t['text3']};">Medium</span></div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                    <span style="width:12px;height:12px;border-radius:2px;background:#006837;display:inline-block;"></span>
+                    <span style="font-size:11px;color:{t['text3']};">High NDVI (healthy)</span></div>
+            </div>""", unsafe_allow_html=True)
+
+    with details_col:
+        st.markdown(f"""<div class="panel"><div class="panel-body"><div class="panel-label" style="margin-bottom:16px;">DISTRIBUTION: Zone Health</div>""", unsafe_allow_html=True)
+        for label, count, color in [("Normal", num_normal, t['green']), ("Warning", num_warning, t['amber']), ("Critical", num_critical, t['red'])]:
+            percentage = round((count / total_zones) * 100) if total_zones > 0 else 0
+            st.markdown(f"""<div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:12.5px;color:{t['text2']};">{label}</span>
+                <span style="font-size:12.5px;color:{color};font-weight:600;font-family:'JetBrains Mono',monospace;">{count} <span style="color:{t['text4']};font-weight:400;">({percentage}%)</span></span></div>
+            <div class="dbar-track"><div class="dbar-fill" style="width:{percentage}%;background:{color};"></div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style="border-top:1px solid {t['border']};padding-top:14px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:11px;color:{t['text4']};">Showing / Total</span>
+                <span style="font-size:24px;font-weight:800;color:{t['text1']};font-family:'JetBrains Mono',monospace;">{filtered_count}<span style="font-size:14px;color:{t['text4']};font-weight:400;">/{total_zones}</span></span>
+            </div></div></div>""", unsafe_allow_html=True)
+
+        st.markdown("")
+        st.markdown(f'<p class="sb-label" style="margin-top:8px;">Zone Details</p>', unsafe_allow_html=True)
+        if filtered_zones.empty:
+            st.markdown(f'<div style="color:{t["text4"]};font-size:12px;padding:12px 0;">No zones to display</div>', unsafe_allow_html=True)
+        else:
+            STATUS_STYLES = {
+                "critical": {"card": "zcard-crit", "color": "c-r", "dot": "dot-r"},
+                "warning":  {"card": "zcard-warn", "color": "c-y", "dot": "dot-y"},
+                "normal":   {"card": "",            "color": "c-g", "dot": "dot-g"},
+            }
+            for _, zone_row in filtered_zones.iterrows():
+                zone_style   = STATUS_STYLES[zone_row["status"]]
+                zone_value   = zone_row[value_col]
+                trend_arrow  = {"rising": "↑", "falling": "↓"}.get(zone_row["trend"], "→")
+                detail_label = f"NDWI: {zone_row['ndwi']}" if value_col == "turbidity" else f"NDRE: {zone_row['ndre']}"
+                st.markdown(f"""<div class="zcard {zone_style['card']}"><div style="display:flex;justify-content:space-between;align-items:flex-start;">
+                    <div><div class="zname"><span class="dot {zone_style['dot']}"></span>{zone_row['name']}</div><div class="zmeta">{detail_label}</div></div>
+                    <div style="text-align:right;"><div class="zval {zone_style['color']}">{zone_value}</div><div style="font-size:10px;color:{t['text4']};">{trend_arrow} {zone_row['trend']}</div></div></div></div>""", unsafe_allow_html=True)
+
+
+    # ══════════════════════════════════════════════════════════════
+    # ALERTS PANEL
+    # ══════════════════════════════════════════════════════════════
+
+    st.markdown("")
+    critical_alerts  = [alert for alert in filtered_alerts if alert["severity"] == "critical"]
+    alerts_header    = f"ALERTS: Active ({len(filtered_alerts)})"
+    if critical_alerts:
+        alerts_header += f" · {len(critical_alerts)} critical"
+    st.markdown(f"""<div class="panel" style="overflow:hidden;"><div class="panel-head">
+        <span class="panel-label">{alerts_header}</span><span class="meta-tag">Today, {datetime.datetime.now().strftime("%d %b %Y")}</span></div>""", unsafe_allow_html=True)
+    if filtered_alerts:
+        for alert in filtered_alerts:
+            alert_css_class = "alrt-crit" if alert["severity"] == "critical" else "alrt-warn"
+            st.markdown(f"""<div class="alrt {alert_css_class}"><div style="display:flex;justify-content:space-between;align-items:center;">
+                <span class="alrt-zone">{alert['zone']}</span><span class="alrt-time">{alert['time']}</span></div>
+                <div class="alrt-msg">{alert['message']}</div></div>""", unsafe_allow_html=True)
     else:
-        STATUS_STYLES = {
-            "critical": {"card": "zcard-crit", "color": "c-r", "dot": "dot-r"},
-            "warning":  {"card": "zcard-warn", "color": "c-y", "dot": "dot-y"},
-            "normal":   {"card": "",            "color": "c-g", "dot": "dot-g"},
-        }
-        for _, zone_row in filtered_zones.iterrows():
-            zone_style   = STATUS_STYLES[zone_row["status"]]
-            zone_value   = zone_row[value_col]
-            trend_arrow  = {"rising": "↑", "falling": "↓"}.get(zone_row["trend"], "→")
-            detail_label = f"NDWI: {zone_row['ndwi']}" if value_col == "turbidity" else f"NDRE: {zone_row['ndre']}"
-            st.markdown(f"""<div class="zcard {zone_style['card']}"><div style="display:flex;justify-content:space-between;align-items:flex-start;">
-                <div><div class="zname"><span class="dot {zone_style['dot']}"></span>{zone_row['name']}</div><div class="zmeta">{detail_label}</div></div>
-                <div style="text-align:right;"><div class="zval {zone_style['color']}">{zone_value}</div><div style="font-size:10px;color:{t['text4']};">{trend_arrow} {zone_row['trend']}</div></div></div></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style="padding:28px;text-align:center;color:{t['text4']};font-size:12px;">No alerts for the current filter</div>""", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-
-# ══════════════════════════════════════════════════════════════
-# ALERTS PANEL
-# ══════════════════════════════════════════════════════════════
-
-st.markdown("")
-critical_alerts  = [alert for alert in filtered_alerts if alert["severity"] == "critical"]
-alerts_header    = f"ALERTS: Active ({len(filtered_alerts)})"
-if critical_alerts:
-    alerts_header += f" · {len(critical_alerts)} critical"
-st.markdown(f"""<div class="panel" style="overflow:hidden;"><div class="panel-head">
-    <span class="panel-label">{alerts_header}</span><span class="meta-tag">Today, {datetime.datetime.now().strftime("%d %b %Y")}</span></div>""", unsafe_allow_html=True)
-if filtered_alerts:
-    for alert in filtered_alerts:
-        alert_css_class = "alrt-crit" if alert["severity"] == "critical" else "alrt-warn"
-        st.markdown(f"""<div class="alrt {alert_css_class}"><div style="display:flex;justify-content:space-between;align-items:center;">
-            <span class="alrt-zone">{alert['zone']}</span><span class="alrt-time">{alert['time']}</span></div>
-            <div class="alrt-msg">{alert['message']}</div></div>""", unsafe_allow_html=True)
-else:
-    st.markdown(f"""<div style="padding:28px;text-align:center;color:{t['text4']};font-size:12px;">No alerts for the current filter</div>""", unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -756,3 +778,4 @@ st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("")
 st.markdown(f"""<div style="text-align:center;padding:24px 0 16px;border-top:1px solid {t['border']};margin-top:24px;">
     <span style="font-size:11px;color:{t['text4']};">NextGen Spark Sdn Bhd · EO Monitoring Prototype v1.0 · Powered by Sentinel-2 & Google Earth Engine</span></div>""", unsafe_allow_html=True)
+
