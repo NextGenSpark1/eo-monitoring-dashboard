@@ -28,8 +28,7 @@ from src.telegram_helper import (
 )
 from src.gee_logic import (
     initialize_gee,
-    get_turbidity_map,
-    get_ndvi_map,
+    get_map_layers,
     RESERVOIR_CONFIG,
     FARM_CONFIG,
 )
@@ -192,36 +191,25 @@ def load_agri_trends():
     pivot["date"] = pivot["date"].dt.strftime("%d %b %Y")
     return pivot
 
-@st.cache_resource(show_spinner=False)
-def load_ndti_tile_url(lat, lon):
-    """Return GEE tile URL for the NDTI turbidity layer."""
-    from datetime import datetime
-    try:
-        initialize_gee()
-        ndti_image, _ = get_turbidity_map(lat, lon, datetime.now().strftime("%Y-%m-%d"))
-        if ndti_image is None:
-            return None, "No clear Sentinel-2 image found in the last 60 days"
-        vis = {"min": -0.1, "max": 0.35,
-               "palette": ["1a237e", "0288d1", "4dd0e1", "fff176", "ff8f00", "b71c1c"]}
-        return ndti_image.getMapId(vis)["tile_fetcher"].url_format, None
-    except Exception as e:
-        return None, str(e)
+NDTI_VIS = {"min": -0.1, "max": 0.35,
+            "palette": ["1a237e", "0288d1", "4dd0e1", "fff176", "ff8f00", "b71c1c"]}
+NDVI_VIS = {"min": 0.1,  "max": 0.85,
+            "palette": ["a50026", "f46d43", "fee08b", "d9ef8b", "66bd63", "1a9850", "006837"]}
 
 
 @st.cache_resource(show_spinner=False)
-def load_ndvi_tile_url(lat, lon):
-    """Return GEE tile URL for the NDVI vegetation layer."""
+def load_map_tile_urls(lat, lon):
+    """Load both NDTI (water) and NDVI (land) tile URLs in one GEE call."""
     from datetime import datetime
     try:
         initialize_gee()
-        ndvi_image, _ = get_ndvi_map(lat, lon, datetime.now().strftime("%Y-%m-%d"))
-        if ndvi_image is None:
-            return None, "No clear Sentinel-2 image found in the last 60 days"
-        vis = {"min": 0.1, "max": 0.85,
-               "palette": ["a50026", "f46d43", "fee08b", "d9ef8b", "66bd63", "1a9850", "006837"]}
-        return ndvi_image.getMapId(vis)["tile_fetcher"].url_format, None
+        ndti_img, ndvi_img, _ = get_map_layers(lat, lon, datetime.now().strftime("%Y-%m-%d"))
+        ndti_url = ndti_img.getMapId(NDTI_VIS)["tile_fetcher"].url_format if ndti_img else None
+        ndvi_url = ndvi_img.getMapId(NDVI_VIS)["tile_fetcher"].url_format if ndvi_img else None
+        error    = None if (ndti_url or ndvi_url) else "No clear Sentinel-2 image in the last 120 days"
+        return ndti_url, ndvi_url, error
     except Exception as e:
-        return None, str(e)
+        return None, None, str(e)
 
 
 def get_all_alerts(zones_df, value_col):
@@ -598,135 +586,82 @@ with map_col:
     import branca.colormap as cm
     from streamlit_folium import st_folium
 
-    if value_col == "turbidity":
-        st.markdown(f"""<div class="panel" style="margin-bottom:0;overflow:hidden;"><div class="panel-head">
-            <span class="panel-label">MAP: Turbidity — Empangan Sultan Abu Bakar (NDTI)</span>
-            <span class="meta-tag">Sentinel-2 L2A · Live GEE</span></div></div>""", unsafe_allow_html=True)
+    center_cfg = RESERVOIR_CONFIG if value_col == "turbidity" else FARM_CONFIG
+    map_title  = "Empangan Sultan Abu Bakar" if value_col == "turbidity" else "Felda Jengka"
 
-        geo_map = folium.Map(
-            location=[RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"]],
-            zoom_start=10, control_scale=True,
-            tiles="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
-            attr="© OpenStreetMap contributors © CARTO",
-        )
-        tile_url, gee_error = load_ndti_tile_url(RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"])
-        if tile_url:
-            folium.TileLayer(
-                tiles=tile_url, attr="Google Earth Engine",
-                name="Turbidity (NDTI)", overlay=True, opacity=0.9,
-            ).add_to(geo_map)
-            colormap = cm.LinearColormap(
-                colors=["#1a237e", "#0288d1", "#4dd0e1", "#fff176", "#ff8f00", "#b71c1c"],
-                vmin=-0.1, vmax=0.35, caption="Turbidity Index (NDTI)",
-            )
-            colormap.add_to(geo_map)
-            folium.TileLayer(
-                tiles="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png",
-                attr="© CARTO", name="Labels", overlay=True, control=False,
-            ).add_to(geo_map)
-        else:
-            st.markdown(f"""<div style="padding:8px 16px;background:{t['amber']}22;border-left:3px solid {t['amber']};
-                font-size:12px;color:{t['text3']};margin-bottom:4px;">
-                Live imagery unavailable — {gee_error}</div>""",
-                unsafe_allow_html=True)
+    st.markdown(f"""<div class="panel" style="margin-bottom:0;overflow:hidden;"><div class="panel-head">
+        <span class="panel-label">MAP: {map_title} — Water Turbidity & Vegetation</span>
+        <span class="meta-tag">Sentinel-2 L2A · Live GEE</span></div></div>""", unsafe_allow_html=True)
 
-        res_zones = all_zones[all_zones["name"] == RESERVOIR_CONFIG["name"]]
-        if not res_zones.empty:
-            row = res_zones.iloc[0]
-            icon_color = {"critical": "red", "warning": "orange", "normal": "green"}.get(row["status"], "blue")
-            popup_html = (
-                f"<div style='font-family:sans-serif;padding:6px;min-width:170px;'>"
-                f"<b style='font-size:13px;'>{row['name']}</b><br>"
-                f"<span style='color:#555;font-size:11px;'>NDTI: <b>{row['turbidity']}</b></span><br>"
-                f"<span style='color:#555;font-size:11px;'>NDWI: <b>{row['ndwi']}</b></span><br>"
-                f"<span style='color:#555;font-size:11px;'>Trend: {row['trend']}</span><br>"
-                f"<span style='font-size:11px;font-weight:600;color:{icon_color};'>{row['status'].upper()}</span>"
-                f"</div>"
-            )
-            folium.Marker(
-                location=[RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"]],
-                popup=folium.Popup(popup_html, max_width=210),
-                tooltip=f"{RESERVOIR_CONFIG['name']} · NDTI {row['turbidity']} · {row['status'].upper()}",
-                icon=folium.Icon(color=icon_color, icon="tint", prefix="fa"),
-            ).add_to(geo_map)
+    geo_map = folium.Map(
+        location=[center_cfg["lat"], center_cfg["lon"]],
+        zoom_start=10, control_scale=True,
+        tiles="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
+        attr="© OpenStreetMap contributors © CARTO",
+    )
 
-        st_folium(geo_map, height=520, use_container_width=True)
-        st.markdown(f"""<div style="display:flex;gap:24px;justify-content:center;margin-top:10px;">
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="width:12px;height:12px;border-radius:2px;background:#1a237e;display:inline-block;"></span>
-                <span style="font-size:11px;color:{t['text3']};">Low NDTI (clean)</span></div>
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="width:12px;height:12px;border-radius:2px;background:#fff176;display:inline-block;"></span>
-                <span style="font-size:11px;color:{t['text3']};">Medium</span></div>
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="width:12px;height:12px;border-radius:2px;background:#b71c1c;display:inline-block;"></span>
-                <span style="font-size:11px;color:{t['text3']};">High NDTI (turbid)</span></div>
-        </div>""", unsafe_allow_html=True)
+    ndti_url, ndvi_url, gee_error = load_map_tile_urls(center_cfg["lat"], center_cfg["lon"])
 
+    if gee_error and not ndti_url and not ndvi_url:
+        st.markdown(f"""<div style="padding:8px 16px;background:{t['amber']}22;border-left:3px solid {t['amber']};
+            font-size:12px;color:{t['text3']};margin-bottom:4px;">
+            Live imagery unavailable — {gee_error}</div>""", unsafe_allow_html=True)
     else:
-        st.markdown(f"""<div class="panel" style="margin-bottom:0;overflow:hidden;"><div class="panel-head">
-            <span class="panel-label">MAP: Vegetation Health — Felda Jengka (NDVI)</span>
-            <span class="meta-tag">Sentinel-2 L2A · Live GEE</span></div></div>""", unsafe_allow_html=True)
+        if ndvi_url:
+            folium.TileLayer(tiles=ndvi_url, attr="GEE", name="Vegetation (NDVI)",
+                             overlay=True, opacity=0.85).add_to(geo_map)
+            cm.LinearColormap(colors=["#a50026","#f46d43","#fee08b","#d9ef8b","#66bd63","#1a9850","#006837"],
+                              vmin=0.1, vmax=0.85, caption="Vegetation (NDVI)").add_to(geo_map)
+        if ndti_url:
+            folium.TileLayer(tiles=ndti_url, attr="GEE", name="Turbidity (NDTI)",
+                             overlay=True, opacity=0.9).add_to(geo_map)
+            cm.LinearColormap(colors=["#1a237e","#0288d1","#4dd0e1","#fff176","#ff8f00","#b71c1c"],
+                              vmin=-0.1, vmax=0.35, caption="Turbidity (NDTI)").add_to(geo_map)
 
-        geo_map = folium.Map(
-            location=[FARM_CONFIG["lat"], FARM_CONFIG["lon"]],
-            zoom_start=10, control_scale=True,
-            tiles="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
-            attr="© OpenStreetMap contributors © CARTO",
+    folium.TileLayer(
+        tiles="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png",
+        attr="© CARTO", overlay=True, control=False,
+    ).add_to(geo_map)
+
+    # Add zone marker
+    zone_row = all_zones[all_zones["name"] == center_cfg["name"]]
+    if not zone_row.empty:
+        row        = zone_row.iloc[0]
+        icon_color = {"critical": "red", "warning": "orange", "normal": "green"}.get(row["status"], "blue")
+        val_label  = f"NDTI {row['turbidity']}" if value_col == "turbidity" else f"NDVI {row['ndvi']}"
+        sec_label  = f"NDWI: {row['ndwi']}" if value_col == "turbidity" else f"NDRE: {row['ndre']}"
+        popup_html = (
+            f"<div style='font-family:sans-serif;padding:6px;min-width:170px;'>"
+            f"<b style='font-size:13px;'>{row['name']}</b><br>"
+            f"<span style='color:#555;font-size:11px;'>{val_label}</span><br>"
+            f"<span style='color:#555;font-size:11px;'>{sec_label}</span><br>"
+            f"<span style='color:#555;font-size:11px;'>Trend: {row['trend']}</span><br>"
+            f"<span style='font-size:11px;font-weight:600;color:{icon_color};'>{row['status'].upper()}</span>"
+            f"</div>"
         )
-        tile_url, gee_error = load_ndvi_tile_url(FARM_CONFIG["lat"], FARM_CONFIG["lon"])
-        if tile_url:
-            folium.TileLayer(
-                tiles=tile_url, attr="Google Earth Engine",
-                name="Vegetation Health (NDVI)", overlay=True, opacity=0.9,
-            ).add_to(geo_map)
-            colormap = cm.LinearColormap(
-                colors=["#a50026", "#f46d43", "#fee08b", "#d9ef8b", "#66bd63", "#1a9850", "#006837"],
-                vmin=0.1, vmax=0.85, caption="Vegetation Index (NDVI)",
-            )
-            colormap.add_to(geo_map)
-            folium.TileLayer(
-                tiles="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png",
-                attr="© CARTO", name="Labels", overlay=True, control=False,
-            ).add_to(geo_map)
-        else:
-            st.markdown(f"""<div style="padding:8px 16px;background:{t['amber']}22;border-left:3px solid {t['amber']};
-                font-size:12px;color:{t['text3']};margin-bottom:4px;">
-                Live imagery unavailable — {gee_error}</div>""",
-                unsafe_allow_html=True)
+        icon_name = "tint" if value_col == "turbidity" else "leaf"
+        folium.Marker(
+            location=[center_cfg["lat"], center_cfg["lon"]],
+            popup=folium.Popup(popup_html, max_width=210),
+            tooltip=f"{row['name']} · {val_label} · {row['status'].upper()}",
+            icon=folium.Icon(color=icon_color, icon=icon_name, prefix="fa"),
+        ).add_to(geo_map)
 
-        farm_zones = all_zones[all_zones["name"] == FARM_CONFIG["name"]]
-        if not farm_zones.empty:
-            row = farm_zones.iloc[0]
-            icon_color = {"critical": "red", "warning": "orange", "normal": "green"}.get(row["status"], "blue")
-            popup_html = (
-                f"<div style='font-family:sans-serif;padding:6px;min-width:170px;'>"
-                f"<b style='font-size:13px;'>{row['name']}</b><br>"
-                f"<span style='color:#555;font-size:11px;'>NDVI: <b>{row['ndvi']}</b></span><br>"
-                f"<span style='color:#555;font-size:11px;'>NDRE: <b>{row['ndre']}</b></span><br>"
-                f"<span style='color:#555;font-size:11px;'>Trend: {row['trend']}</span><br>"
-                f"<span style='font-size:11px;font-weight:600;color:{icon_color};'>{row['status'].upper()}</span>"
-                f"</div>"
-            )
-            folium.Marker(
-                location=[FARM_CONFIG["lat"], FARM_CONFIG["lon"]],
-                popup=folium.Popup(popup_html, max_width=210),
-                tooltip=f"{FARM_CONFIG['name']} · NDVI {row['ndvi']} · {row['status'].upper()}",
-                icon=folium.Icon(color=icon_color, icon="leaf", prefix="fa"),
-            ).add_to(geo_map)
-
-        st_folium(geo_map, height=520, use_container_width=True)
-        st.markdown(f"""<div style="display:flex;gap:24px;justify-content:center;margin-top:10px;">
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="width:12px;height:12px;border-radius:2px;background:#a50026;display:inline-block;"></span>
-                <span style="font-size:11px;color:{t['text3']};">Low NDVI (stressed)</span></div>
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="width:12px;height:12px;border-radius:2px;background:#fee08b;display:inline-block;"></span>
-                <span style="font-size:11px;color:{t['text3']};">Medium</span></div>
-            <div style="display:flex;align-items:center;gap:6px;">
-                <span style="width:12px;height:12px;border-radius:2px;background:#006837;display:inline-block;"></span>
-                <span style="font-size:11px;color:{t['text3']};">High NDVI (healthy)</span></div>
-        </div>""", unsafe_allow_html=True)
+    st_folium(geo_map, height=520, use_container_width=True)
+    st.markdown(f"""<div style="display:flex;gap:24px;justify-content:center;margin-top:10px;">
+        <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:12px;height:12px;border-radius:2px;background:#1a237e;display:inline-block;"></span>
+            <span style="font-size:11px;color:{t['text3']};">Clean water</span></div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:12px;height:12px;border-radius:2px;background:#b71c1c;display:inline-block;"></span>
+            <span style="font-size:11px;color:{t['text3']};">Turbid water</span></div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:12px;height:12px;border-radius:2px;background:#006837;display:inline-block;"></span>
+            <span style="font-size:11px;color:{t['text3']};">Healthy vegetation</span></div>
+        <div style="display:flex;align-items:center;gap:6px;">
+            <span style="width:12px;height:12px;border-radius:2px;background:#a50026;display:inline-block;"></span>
+            <span style="font-size:11px;color:{t['text3']};">Stressed vegetation</span></div>
+    </div>""", unsafe_allow_html=True)
 
 with details_col:
     st.markdown(f"""<div class="panel"><div class="panel-body"><div class="panel-label" style="margin-bottom:16px;">DISTRIBUTION: Zone Health</div>""", unsafe_allow_html=True)

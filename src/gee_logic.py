@@ -263,6 +263,42 @@ def compute_alert_level(ndti_mean=None, ndvi_mean=None, ndre_mean=None):
     return "normal"
 
 
+# LIVE MAP LAYERS — combined water (NDTI) + land (NDVI) for dashboard maps
+
+def get_map_layers(lat, lon, date_str, buffer_m=2000):
+    """
+    Returns both NDTI (water-masked) and NDVI (land-masked) ee.Image objects
+    for displaying a complete environmental map. Single GEE call for both layers.
+    Uses 120-day lookback and 70% cloud threshold for maximum coverage.
+    """
+    from datetime import datetime, timedelta
+
+    stats_area   = ee.Geometry.Point([lon, lat]).buffer(buffer_m).bounds()
+    display_area = ee.Geometry.Point([lon, lat]).buffer(500000).bounds()
+
+    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+    start    = (date_obj - timedelta(days=120)).strftime("%Y-%m-%d")
+    end      = date_str
+
+    collection = (
+        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterBounds(display_area)
+        .filterDate(start, end)
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 70))
+    )
+    if collection.size().getInfo() == 0:
+        return None, None, stats_area
+
+    image      = collection.median()
+    water_mask = compute_ndwi(image).gt(0)
+    land_mask  = compute_ndwi(image).lt(0.1)
+
+    ndti = compute_ndti(image).updateMask(water_mask)
+    ndvi = compute_ndvi(image).updateMask(land_mask)
+
+    return ndti, ndvi, stats_area
+
+
 # LIVE MAP TILE (for geemap in dashboard)
 
 def get_turbidity_map(lat, lon, date_str, buffer_m=2000):
