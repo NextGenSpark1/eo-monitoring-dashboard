@@ -257,26 +257,28 @@ def compute_alert_level(ndti_mean=None, ndvi_mean=None, ndre_mean=None):
 
 def get_turbidity_map(lat, lon, date_str, buffer_m=2000):
     """
-    Generate live turbidity map tile for geemap.
-    Cached — first call processes, subsequent calls instant.
+    Generate live turbidity map tile — unclipped for full-map coverage.
     """
     from datetime import datetime, timedelta
 
-    area = (
-        ee.Geometry.Point([lon, lat])
-        .buffer(buffer_m)
-        .bounds()
-    )
+    stats_area = ee.Geometry.Point([lon, lat]).buffer(buffer_m).bounds()
+    display_area = ee.Geometry.Point([lon, lat]).buffer(60000).bounds()
 
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-    start    = (date_obj - timedelta(days=15)).strftime("%Y-%m-%d")
-    end      = (date_obj + timedelta(days=15)).strftime("%Y-%m-%d")
+    start    = (date_obj - timedelta(days=60)).strftime("%Y-%m-%d")
+    end      = date_str
 
-    image, _, _ = load_sentinel2(area, start, end, cloud_threshold=30)
-    if image is None:
-        return None, area
+    collection = (
+        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterBounds(display_area)
+        .filterDate(start, end)
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 50))
+    )
+    if collection.size().getInfo() == 0:
+        return None, stats_area
 
-    return compute_ndti(image), area
+    image = collection.median()
+    return compute_ndti(image), stats_area
 
 
 
@@ -284,26 +286,28 @@ def get_turbidity_map(lat, lon, date_str, buffer_m=2000):
 
 def get_ndvi_map(lat, lon, date_str, buffer_m=3000):
     """
-    Generate live NDVI map tile for geemap.
-    Cached — first call processes, subsequent calls instant.
+    Generate live NDVI map tile — unclipped for full-map coverage.
     """
     from datetime import datetime, timedelta
 
-    area = (
-        ee.Geometry.Point([lon, lat])
-        .buffer(buffer_m)
-        .bounds()
-    )
+    stats_area   = ee.Geometry.Point([lon, lat]).buffer(buffer_m).bounds()
+    display_area = ee.Geometry.Point([lon, lat]).buffer(60000).bounds()
 
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-    start    = (date_obj - timedelta(days=15)).strftime("%Y-%m-%d")
-    end      = (date_obj + timedelta(days=15)).strftime("%Y-%m-%d")
+    start    = (date_obj - timedelta(days=60)).strftime("%Y-%m-%d")
+    end      = date_str
 
-    image, _, _ = load_sentinel2(area, start, end, cloud_threshold=30)
-    if image is None:
-        return None, area
+    collection = (
+        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterBounds(display_area)
+        .filterDate(start, end)
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 50))
+    )
+    if collection.size().getInfo() == 0:
+        return None, stats_area
 
-    return compute_ndvi(image), area
+    image = collection.median()
+    return compute_ndvi(image), stats_area
 
 
 # FULL PIPELINE RUNNER — 12 MONTHS

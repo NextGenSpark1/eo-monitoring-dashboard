@@ -461,7 +461,6 @@ def render_search_ui():
         "🛰️ Loading recent satellite data... "
         "(~30 seconds for new locations)"
     ):
-        from dynamic_zone import analyse_location
         quick_result = analyse_location(
             lat       = lat,
             lon       = lon,
@@ -635,8 +634,6 @@ def _render_trend_chart(result: dict, label: str = "Trend"):
  
 def _render_live_map(lat: float, lon: float, zone_type: str):
     """Render live geemap tile."""
-    from dynamic_zone import get_live_map
- 
     st.markdown("#### 🗺️ Live Satellite Map")
     with st.spinner("Loading satellite map..."):
         map_result = get_live_map(lat, lon, zone_type)
@@ -702,8 +699,6 @@ def _render_data_table(result: dict):
  
 def _render_save_button(result: dict):
     """Render save to dashboard button."""
-    from dynamic_zone import save_custom_zone
- 
     col1, col2 = st.columns([1, 2])
  
     with col1:
