@@ -274,7 +274,8 @@ def get_map_layers(lat, lon, date_str, buffer_m=2000):
     from datetime import datetime, timedelta
 
     stats_area   = ee.Geometry.Point([lon, lat]).buffer(buffer_m).bounds()
-    display_area = ee.Geometry.Point([lon, lat]).buffer(500000).bounds()
+    # Full Malaysia bounding box — Peninsular + Sabah + Sarawak
+    display_area = ee.Geometry.Rectangle([99.6, 0.8, 119.5, 7.5])
 
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
     start    = (date_obj - timedelta(days=120)).strftime("%Y-%m-%d")

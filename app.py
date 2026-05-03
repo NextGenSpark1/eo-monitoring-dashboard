@@ -594,11 +594,12 @@ with map_col:
         <span class="meta-tag">Sentinel-2 L2A · Live GEE</span></div></div>""", unsafe_allow_html=True)
 
     geo_map = folium.Map(
-        location=[center_cfg["lat"], center_cfg["lon"]],
-        zoom_start=10, control_scale=True,
+        location=[4.2, 109.5],
+        zoom_start=6, control_scale=True,
         tiles="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
         attr="© OpenStreetMap contributors © CARTO",
     )
+    geo_map.fit_bounds([[0.8, 99.6], [7.5, 119.5]])
 
     ndti_url, ndvi_url, gee_error = load_map_tile_urls(center_cfg["lat"], center_cfg["lon"])
 
