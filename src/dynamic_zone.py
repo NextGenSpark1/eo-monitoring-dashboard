@@ -299,7 +299,7 @@ def get_live_map(lat: float, lon: float, zone_type: str,
 
         initialize_gee()
 
-        display_area = ee.Geometry.Point([lon, lat]).buffer(20000).bounds()
+        display_area = ee.Geometry.Point([lon, lat]).buffer(500000).bounds()
         end          = datetime.now()
         start        = end - timedelta(days=60)
 

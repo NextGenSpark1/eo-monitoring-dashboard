@@ -272,7 +272,7 @@ def get_turbidity_map(lat, lon, date_str, buffer_m=2000):
     from datetime import datetime, timedelta
 
     stats_area = ee.Geometry.Point([lon, lat]).buffer(buffer_m).bounds()
-    display_area = ee.Geometry.Point([lon, lat]).buffer(60000).bounds()
+    display_area = ee.Geometry.Point([lon, lat]).buffer(500000).bounds()
 
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
     start    = (date_obj - timedelta(days=60)).strftime("%Y-%m-%d")
@@ -301,7 +301,7 @@ def get_ndvi_map(lat, lon, date_str, buffer_m=3000):
     from datetime import datetime, timedelta
 
     stats_area   = ee.Geometry.Point([lon, lat]).buffer(buffer_m).bounds()
-    display_area = ee.Geometry.Point([lon, lat]).buffer(60000).bounds()
+    display_area = ee.Geometry.Point([lon, lat]).buffer(500000).bounds()
 
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
     start    = (date_obj - timedelta(days=60)).strftime("%Y-%m-%d")
