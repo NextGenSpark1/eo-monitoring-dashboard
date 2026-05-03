@@ -776,6 +776,22 @@ st.markdown("</div>", unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════
+# LIVE LOOKUP
+# ══════════════════════════════════════════════════════════════
+
+st.markdown("")
+st.markdown(f"""<div class="panel" style="overflow:hidden;"><div class="panel-head">
+    <span class="panel-label">LIVE LOOKUP: Analyse Any Location</span>
+    <span class="meta-tag">GEE · Powered by Sentinel-2</span></div>
+    <div class="panel-body">""", unsafe_allow_html=True)
+
+from src.dynamic_zone import render_search_ui
+render_search_ui()
+
+st.markdown("</div></div>", unsafe_allow_html=True)
+
+
+# ══════════════════════════════════════════════════════════════
 # FOOTER
 # ══════════════════════════════════════════════════════════════
 
