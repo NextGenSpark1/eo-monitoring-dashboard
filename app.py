@@ -605,15 +605,15 @@ with map_col:
 
         geo_map = folium.Map(
             location=[RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"]],
-            zoom_start=13, control_scale=True,
-            tiles="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
+            zoom_start=10, control_scale=True,
+            tiles="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
             attr="© OpenStreetMap contributors © CARTO",
         )
         tile_url, gee_error = load_ndti_tile_url(RESERVOIR_CONFIG["lat"], RESERVOIR_CONFIG["lon"])
         if tile_url:
             folium.TileLayer(
                 tiles=tile_url, attr="Google Earth Engine",
-                name="Turbidity (NDTI)", overlay=True,
+                name="Turbidity (NDTI)", overlay=True, opacity=0.8,
             ).add_to(geo_map)
             colormap = cm.LinearColormap(
                 colors=["#1a237e", "#0288d1", "#4dd0e1", "#fff176", "#ff8f00", "#b71c1c"],
@@ -621,7 +621,7 @@ with map_col:
             )
             colormap.add_to(geo_map)
             folium.TileLayer(
-                tiles="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png",
+                tiles="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png",
                 attr="© CARTO", name="Labels", overlay=True, control=False,
             ).add_to(geo_map)
         else:
@@ -670,15 +670,15 @@ with map_col:
 
         geo_map = folium.Map(
             location=[FARM_CONFIG["lat"], FARM_CONFIG["lon"]],
-            zoom_start=13, control_scale=True,
-            tiles="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
+            zoom_start=10, control_scale=True,
+            tiles="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
             attr="© OpenStreetMap contributors © CARTO",
         )
         tile_url, gee_error = load_ndvi_tile_url(FARM_CONFIG["lat"], FARM_CONFIG["lon"])
         if tile_url:
             folium.TileLayer(
                 tiles=tile_url, attr="Google Earth Engine",
-                name="Vegetation Health (NDVI)", overlay=True,
+                name="Vegetation Health (NDVI)", overlay=True, opacity=0.8,
             ).add_to(geo_map)
             colormap = cm.LinearColormap(
                 colors=["#a50026", "#f46d43", "#fee08b", "#d9ef8b", "#66bd63", "#1a9850", "#006837"],
@@ -686,7 +686,7 @@ with map_col:
             )
             colormap.add_to(geo_map)
             folium.TileLayer(
-                tiles="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png",
+                tiles="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png",
                 attr="© CARTO", name="Labels", overlay=True, control=False,
             ).add_to(geo_map)
         else:

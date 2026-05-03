@@ -316,29 +316,29 @@ def get_live_map(lat: float, lon: float, zone_type: str,
         image = collection.median()
 
         geo_map = folium.Map(
-            location=[lat, lon], zoom_start=13, control_scale=True,
-            tiles="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
+            location=[lat, lon], zoom_start=10, control_scale=True,
+            tiles="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
             attr="© OpenStreetMap contributors © CARTO",
         )
 
         if zone_type in ["hydro", "both"]:
-            ndti    = compute_ndti(image)
-            vis     = {"min": -0.1, "max": 0.35, "palette": ["1a237e", "0288d1", "4dd0e1", "fff176", "ff8f00", "b71c1c"]}
+            ndti     = compute_ndti(image)
+            vis      = {"min": -0.1, "max": 0.35, "palette": ["1a237e", "0288d1", "4dd0e1", "fff176", "ff8f00", "b71c1c"]}
             tile_url = ndti.getMapId(vis)["tile_fetcher"].url_format
-            folium.TileLayer(tiles=tile_url, attr="Google Earth Engine", name="Turbidity (NDTI)", overlay=True).add_to(geo_map)
+            folium.TileLayer(tiles=tile_url, attr="Google Earth Engine", name="Turbidity (NDTI)", overlay=True, opacity=0.8).add_to(geo_map)
             cm.LinearColormap(colors=["#1a237e","#0288d1","#4dd0e1","#fff176","#ff8f00","#b71c1c"],
                               vmin=-0.1, vmax=0.35, caption="Turbidity Index (NDTI)").add_to(geo_map)
 
         if zone_type in ["agri", "both"]:
-            ndvi    = compute_ndvi(image)
-            vis     = {"min": 0.1, "max": 0.85, "palette": ["a50026", "f46d43", "fee08b", "d9ef8b", "66bd63", "1a9850", "006837"]}
+            ndvi     = compute_ndvi(image)
+            vis      = {"min": 0.1, "max": 0.85, "palette": ["a50026", "f46d43", "fee08b", "d9ef8b", "66bd63", "1a9850", "006837"]}
             tile_url = ndvi.getMapId(vis)["tile_fetcher"].url_format
-            folium.TileLayer(tiles=tile_url, attr="Google Earth Engine", name="Vegetation (NDVI)", overlay=True).add_to(geo_map)
+            folium.TileLayer(tiles=tile_url, attr="Google Earth Engine", name="Vegetation (NDVI)", overlay=True, opacity=0.8).add_to(geo_map)
             cm.LinearColormap(colors=["#a50026","#f46d43","#fee08b","#d9ef8b","#66bd63","#1a9850","#006837"],
                               vmin=0.1, vmax=0.85, caption="Vegetation Index (NDVI)").add_to(geo_map)
 
         folium.TileLayer(
-            tiles="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png",
+            tiles="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png",
             attr="© CARTO", overlay=True, control=False,
         ).add_to(geo_map)
         folium.Marker(location=[lat, lon], tooltip=f"{lat:.4f}, {lon:.4f}",
