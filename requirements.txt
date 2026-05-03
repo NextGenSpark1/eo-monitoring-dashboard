@@ -1,5 +1,4 @@
 earthengine-api
-geemap
 streamlit
 pandas
 folium
@@ -9,4 +8,6 @@ altair
 pydeck
 diskcache
 requests
-
+branca
+geopy
+plotly
