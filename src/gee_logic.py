@@ -287,8 +287,6 @@ def get_map_layers(lat, lon, date_str, buffer_m=2000):
         .filterDate(start, end)
         .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 90))
     )
-    if collection.size().getInfo() == 0:
-        return None, None, stats_area
 
     image      = collection.median()
     water_mask = compute_ndwi(image).gt(0)
