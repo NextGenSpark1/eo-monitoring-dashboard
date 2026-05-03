@@ -321,19 +321,22 @@ def get_live_map(lat: float, lon: float, zone_type: str,
             attr="© OpenStreetMap contributors © CARTO",
         )
 
+        water_mask = compute_ndwi(image).gt(0)
+        land_mask  = compute_ndwi(image).lt(0.1)
+
         if zone_type in ["hydro", "both"]:
-            ndti     = compute_ndti(image)
+            ndti     = compute_ndti(image).updateMask(water_mask)
             vis      = {"min": -0.1, "max": 0.35, "palette": ["1a237e", "0288d1", "4dd0e1", "fff176", "ff8f00", "b71c1c"]}
             tile_url = ndti.getMapId(vis)["tile_fetcher"].url_format
-            folium.TileLayer(tiles=tile_url, attr="Google Earth Engine", name="Turbidity (NDTI)", overlay=True, opacity=0.8).add_to(geo_map)
+            folium.TileLayer(tiles=tile_url, attr="Google Earth Engine", name="Turbidity (NDTI)", overlay=True, opacity=0.9).add_to(geo_map)
             cm.LinearColormap(colors=["#1a237e","#0288d1","#4dd0e1","#fff176","#ff8f00","#b71c1c"],
                               vmin=-0.1, vmax=0.35, caption="Turbidity Index (NDTI)").add_to(geo_map)
 
         if zone_type in ["agri", "both"]:
-            ndvi     = compute_ndvi(image)
+            ndvi     = compute_ndvi(image).updateMask(land_mask)
             vis      = {"min": 0.1, "max": 0.85, "palette": ["a50026", "f46d43", "fee08b", "d9ef8b", "66bd63", "1a9850", "006837"]}
             tile_url = ndvi.getMapId(vis)["tile_fetcher"].url_format
-            folium.TileLayer(tiles=tile_url, attr="Google Earth Engine", name="Vegetation (NDVI)", overlay=True, opacity=0.8).add_to(geo_map)
+            folium.TileLayer(tiles=tile_url, attr="Google Earth Engine", name="Vegetation (NDVI)", overlay=True, opacity=0.9).add_to(geo_map)
             cm.LinearColormap(colors=["#a50026","#f46d43","#fee08b","#d9ef8b","#66bd63","#1a9850","#006837"],
                               vmin=0.1, vmax=0.85, caption="Vegetation Index (NDVI)").add_to(geo_map)
 

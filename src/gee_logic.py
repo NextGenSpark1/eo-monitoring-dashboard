@@ -267,36 +267,7 @@ def compute_alert_level(ndti_mean=None, ndvi_mean=None, ndre_mean=None):
 
 def get_turbidity_map(lat, lon, date_str, buffer_m=2000):
     """
-    Generate live turbidity map tile — unclipped for full-map coverage.
-    """
-    from datetime import datetime, timedelta
-
-    stats_area = ee.Geometry.Point([lon, lat]).buffer(buffer_m).bounds()
-    display_area = ee.Geometry.Point([lon, lat]).buffer(500000).bounds()
-
-    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-    start    = (date_obj - timedelta(days=60)).strftime("%Y-%m-%d")
-    end      = date_str
-
-    collection = (
-        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-        .filterBounds(display_area)
-        .filterDate(start, end)
-        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 50))
-    )
-    if collection.size().getInfo() == 0:
-        return None, stats_area
-
-    image = collection.median()
-    return compute_ndti(image), stats_area
-
-
-
-# LIVE MAP TILE — NDVI (for agriculture module in dashboard)
-
-def get_ndvi_map(lat, lon, date_str, buffer_m=3000):
-    """
-    Generate live NDVI map tile — unclipped for full-map coverage.
+    Generate live turbidity map tile — water pixels only.
     """
     from datetime import datetime, timedelta
 
@@ -316,8 +287,39 @@ def get_ndvi_map(lat, lon, date_str, buffer_m=3000):
     if collection.size().getInfo() == 0:
         return None, stats_area
 
-    image = collection.median()
-    return compute_ndvi(image), stats_area
+    image      = collection.median()
+    water_mask = compute_ndwi(image).gt(0)
+    return compute_ndti(image).updateMask(water_mask), stats_area
+
+
+
+# LIVE MAP TILE — NDVI (for agriculture module in dashboard)
+
+def get_ndvi_map(lat, lon, date_str, buffer_m=3000):
+    """
+    Generate live NDVI map tile — land/vegetation pixels only.
+    """
+    from datetime import datetime, timedelta
+
+    stats_area   = ee.Geometry.Point([lon, lat]).buffer(buffer_m).bounds()
+    display_area = ee.Geometry.Point([lon, lat]).buffer(500000).bounds()
+
+    date_obj = datetime.strptime(date_str, "%Y-%m-%d")
+    start    = (date_obj - timedelta(days=60)).strftime("%Y-%m-%d")
+    end      = date_str
+
+    collection = (
+        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterBounds(display_area)
+        .filterDate(start, end)
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 50))
+    )
+    if collection.size().getInfo() == 0:
+        return None, stats_area
+
+    image     = collection.median()
+    land_mask = compute_ndwi(image).lt(0.1)
+    return compute_ndvi(image).updateMask(land_mask), stats_area
 
 
 # FULL PIPELINE RUNNER — 12 MONTHS

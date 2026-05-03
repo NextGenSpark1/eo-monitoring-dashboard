@@ -613,7 +613,7 @@ with map_col:
         if tile_url:
             folium.TileLayer(
                 tiles=tile_url, attr="Google Earth Engine",
-                name="Turbidity (NDTI)", overlay=True, opacity=0.8,
+                name="Turbidity (NDTI)", overlay=True, opacity=0.9,
             ).add_to(geo_map)
             colormap = cm.LinearColormap(
                 colors=["#1a237e", "#0288d1", "#4dd0e1", "#fff176", "#ff8f00", "#b71c1c"],
@@ -678,7 +678,7 @@ with map_col:
         if tile_url:
             folium.TileLayer(
                 tiles=tile_url, attr="Google Earth Engine",
-                name="Vegetation Health (NDVI)", overlay=True, opacity=0.8,
+                name="Vegetation Health (NDVI)", overlay=True, opacity=0.9,
             ).add_to(geo_map)
             colormap = cm.LinearColormap(
                 colors=["#a50026", "#f46d43", "#fee08b", "#d9ef8b", "#66bd63", "#1a9850", "#006837"],
