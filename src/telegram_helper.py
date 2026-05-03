@@ -1,3 +1,11 @@
+# ================================================================================
+# src/telegram_helper.py — Telegram Alert System
+# ================================================================================
+# Developer  : Habiba Hassan (AI Analytics & Visualization)
+# Description: Telegram bot integration — message sending, alert formatting,
+#              subscriber management, and test alert utilities.
+# ================================================================================
+
 import os
 import requests
 from datetime import datetime
