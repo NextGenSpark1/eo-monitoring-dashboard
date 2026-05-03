@@ -356,13 +356,6 @@ def get_live_map(lat: float, lon: float, zone_type: str,
 def render_search_ui():
     """Complete Streamlit UI for custom zone search."""
 
-    st.subheader("Analyse Any Location")
-    st.caption(
-        "Search by place name or paste coordinates. "
-        "Recent data loads in ~30 seconds. "
-        "Full 12-month history loads in ~2 minutes."
-    )
-
     # Quick suggestions
     with st.expander("Quick suggestions — Malaysian locations"):
         suggestions = get_suggestions()
@@ -370,14 +363,13 @@ def render_search_ui():
         for i, s in enumerate(suggestions):
             label = "Hydro" if s["type"] == "hydro" else "Agri"
             if cols[i % 3].button(f"{s['name']} ({label})", key=f"sug_{i}"):
-                st.session_state["search_input"] = s["name"]
+                st.session_state["location_search"] = s["name"]
                 st.rerun()
 
     col1, col2 = st.columns([3, 1])
     with col1:
         search_input = st.text_input(
             "Enter location name or coordinates",
-            value       = st.session_state.get("search_input", ""),
             placeholder = "e.g. Tasik Kenyir  or  5.0500, 102.6000",
             key         = "location_search"
         )
@@ -388,82 +380,74 @@ def render_search_ui():
             format_func = lambda x: {"hydro": "Hydro", "agri": "Agri", "both": "Both"}[x]
         )
 
-    with st.expander("Advanced options"):
-        buffer_m = st.slider("Zone radius (metres)", 500, 5000, 2000, step=500)
-
     analyse_clicked = st.button("Analyse Location", type="primary", use_container_width=True)
 
-    # Run analysis and store results in session_state
     if analyse_clicked and search_input:
         with st.spinner("Finding location..."):
             location = detect_and_resolve(search_input)
 
         if not location["valid"]:
-            st.error(location["error"])
+            st.markdown(f'<div class="alrt alrt-crit"><div class="alrt-zone">Location not found</div><div class="alrt-msg">{location["error"]}</div></div>', unsafe_allow_html=True)
             return
-
-        if location.get("warning"):
-            st.warning(location["warning"])
 
         with st.spinner("Loading recent satellite data... (~30 seconds for new locations)"):
             quick_result = analyse_location(
                 lat=location["lat"], lon=location["lon"],
                 zone_name=location["name"], zone_type=zone_type,
-                months=3, buffer_m=buffer_m
+                months=3, buffer_m=2000
             )
 
         if not quick_result["success"]:
-            st.error(f"Analysis failed: {quick_result['error']}")
+            st.markdown(f'<div class="alrt alrt-crit"><div class="alrt-zone">Analysis failed</div><div class="alrt-msg">{quick_result["error"]}</div></div>', unsafe_allow_html=True)
             return
 
-        # Persist results so reruns (theme change, buttons) don't wipe them
-        st.session_state["lookup_location"]    = location
-        st.session_state["lookup_quick"]       = quick_result
-        st.session_state["lookup_zone_type"]   = zone_type
-        st.session_state["lookup_buffer_m"]    = buffer_m
+        st.session_state["lookup_location"]  = location
+        st.session_state["lookup_quick"]     = quick_result
+        st.session_state["lookup_zone_type"] = zone_type
         st.session_state.pop("lookup_full", None)
 
-    # Display stored results (survives any rerun)
     if "lookup_quick" not in st.session_state:
         return
 
     location     = st.session_state["lookup_location"]
     quick_result = st.session_state["lookup_quick"]
     zone_type    = st.session_state["lookup_zone_type"]
-    buffer_m     = st.session_state["lookup_buffer_m"]
     lat, lon     = location["lat"], location["lon"]
+    cache_note   = " · from cache" if quick_result.get("from_cache") else ""
 
-    cache_note = "  (from cache)" if quick_result.get("from_cache") else ""
-    st.info(f"**{location['name']}**  |  {lat:.4f}, {lon:.4f}{cache_note}")
+    st.markdown(f"""<div style="margin:16px 0 20px;padding:12px 18px;border-radius:10px;
+        border-left:3px solid #2563eb;background:rgba(37,99,235,0.06);">
+        <span style="font-size:14px;font-weight:600;">{location['name']}</span>
+        <span class="meta-tag" style="margin-left:12px;">{lat:.4f}, {lon:.4f}{cache_note}</span>
+    </div>""", unsafe_allow_html=True)
 
-    st.markdown("#### Recent Data — Last 3 Months")
+    st.markdown('<div class="panel-label" style="margin-bottom:14px;">RECENT DATA — LAST 3 MONTHS</div>', unsafe_allow_html=True)
     _render_kpis(quick_result)
     _render_trend_chart(quick_result, label="Recent 3-Month Trend")
     _render_live_map(lat, lon, zone_type)
 
-    st.divider()
-    st.markdown("#### Full 12-Month History")
+    st.markdown('<hr style="margin:24px 0;border-color:rgba(0,0,0,0.07);">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-label" style="margin-bottom:14px;">FULL 12-MONTH HISTORY</div>', unsafe_allow_html=True)
 
     if "lookup_full" not in st.session_state:
         if st.button("Load Full 12-Month History", help="Takes ~2 minutes for new locations. Instant if cached."):
-            with st.spinner("Loading full 12-month history... This takes 1-2 minutes for new locations."):
+            with st.spinner("Loading full 12-month history..."):
                 full_result = analyse_location(
                     lat=lat, lon=lon, zone_name=location["name"],
-                    zone_type=zone_type, months=12, buffer_m=buffer_m
+                    zone_type=zone_type, months=12, buffer_m=2000
                 )
             if full_result["success"]:
                 st.session_state["lookup_full"] = full_result
                 st.rerun()
             else:
-                st.error(f"Full history failed: {full_result['error']}")
-        st.caption("You can save the 3-month preview now, or load full history first for better trends.")
+                st.markdown(f'<div class="alrt alrt-crit"><div class="alrt-zone">Failed</div><div class="alrt-msg">{full_result["error"]}</div></div>', unsafe_allow_html=True)
         _render_save_button(quick_result)
     else:
         full_result = st.session_state["lookup_full"]
         _render_trend_chart(full_result, label="Full 12-Month Trend")
         _render_data_table(full_result)
         _render_trend_summary(full_result)
-        st.divider()
+        st.markdown('<hr style="margin:16px 0;border-color:rgba(0,0,0,0.07);">', unsafe_allow_html=True)
         _render_save_button(full_result)
  
  
@@ -472,106 +456,122 @@ def render_search_ui():
 # ============================================================
  
 def _render_kpis(result: dict):
-    """Render KPI metric cards."""
- 
+    """Render KPI cards matching the main dashboard style."""
+
     if result["zone_type"] in ["hydro", "both"] and result["latest_hydro"]:
-        h = result["latest_hydro"]
-        c1, c2, c3, c4 = st.columns(4)
- 
-        c1.metric("Latest NDTI",   f"{h['ndti_mean']:.4f}"  if h.get('ndti_mean')  else "N/A")
-        c2.metric("Latest NDWI",   f"{h['ndwi_mean']:.4f}"  if h.get('ndwi_mean')  else "N/A")
-        c3.metric("Cloud Cover",   f"{h['cloud_pct']}%"     if h.get('cloud_pct')  else "N/A")
-        c4.metric("Alert Status",  h.get('alert_level', '').upper() or "N/A")
+        h      = result["latest_hydro"]
+        alert  = h.get("alert_level", "normal")
+        accent = {"critical": "#dc2626", "warning": "#d97706", "normal": "#16a34a"}.get(alert, "#2563eb")
+        tag    = {"critical": "tag-red",  "warning": "tag-amber", "normal": "tag-green"}.get(alert, "tag-green")
+        ndti   = f"{h['ndti_mean']:.4f}" if h.get("ndti_mean") is not None else "N/A"
+        ndwi   = f"{h['ndwi_mean']:.4f}" if h.get("ndwi_mean") is not None else "N/A"
+        cloud  = f"{h['cloud_pct']}%"    if h.get("cloud_pct") is not None else "N/A"
+        glow   = "kpi-glow" if alert == "critical" else ""
+        st.markdown(f"""<div class="kpi-row">
+            <div class="kpi"><div class="kpi-accent" style="background:#2563eb;"></div>
+                <div class="kpi-label">Latest NDTI</div><div class="kpi-val">{ndti}</div>
+                <span class="kpi-tag tag-blue">Turbidity Index</span></div>
+            <div class="kpi"><div class="kpi-accent" style="background:#0288d1;"></div>
+                <div class="kpi-label">Latest NDWI</div><div class="kpi-val">{ndwi}</div>
+                <span class="kpi-tag tag-blue">Water Index</span></div>
+            <div class="kpi"><div class="kpi-accent" style="background:#94a3b8;"></div>
+                <div class="kpi-label">Cloud Cover</div><div class="kpi-val">{cloud}</div>
+                <span class="kpi-tag tag-blue">Last image</span></div>
+            <div class="kpi {glow}"><div class="kpi-accent" style="background:{accent};"></div>
+                <div class="kpi-label">Alert Status</div>
+                <div class="kpi-val" style="font-size:22px;">{alert.upper()}</div>
+                <span class="kpi-tag {tag}">{alert.capitalize()}</span></div>
+        </div>""", unsafe_allow_html=True)
 
     if result["zone_type"] in ["agri", "both"] and result["latest_agri"]:
-        a = result["latest_agri"]
-        c1, c2, c3, c4 = st.columns(4)
-
-        c1.metric("Latest NDVI",   f"{a['ndvi_mean']:.4f}"  if a.get('ndvi_mean')  else "N/A")
-        c2.metric("Latest NDRE",   f"{a['ndre_mean']:.4f}"  if a.get('ndre_mean')  else "N/A")
-        c3.metric("Cloud Cover",   f"{a['cloud_pct']}%"     if a.get('cloud_pct')  else "N/A")
-        c4.metric("Alert Status",  a.get('alert_level', '').upper() or "N/A")
+        a      = result["latest_agri"]
+        alert  = a.get("alert_level", "normal")
+        accent = {"critical": "#dc2626", "warning": "#d97706", "normal": "#16a34a"}.get(alert, "#16a34a")
+        tag    = {"critical": "tag-red",  "warning": "tag-amber", "normal": "tag-green"}.get(alert, "tag-green")
+        ndvi   = f"{a['ndvi_mean']:.4f}" if a.get("ndvi_mean") is not None else "N/A"
+        ndre   = f"{a['ndre_mean']:.4f}" if a.get("ndre_mean") is not None else "N/A"
+        cloud  = f"{a['cloud_pct']}%"    if a.get("cloud_pct") is not None else "N/A"
+        glow   = "kpi-glow" if alert == "critical" else ""
+        st.markdown(f"""<div class="kpi-row">
+            <div class="kpi"><div class="kpi-accent" style="background:#16a34a;"></div>
+                <div class="kpi-label">Latest NDVI</div><div class="kpi-val">{ndvi}</div>
+                <span class="kpi-tag tag-green">Vegetation Index</span></div>
+            <div class="kpi"><div class="kpi-accent" style="background:#15803d;"></div>
+                <div class="kpi-label">Latest NDRE</div><div class="kpi-val">{ndre}</div>
+                <span class="kpi-tag tag-green">Chlorophyll</span></div>
+            <div class="kpi"><div class="kpi-accent" style="background:#94a3b8;"></div>
+                <div class="kpi-label">Cloud Cover</div><div class="kpi-val">{cloud}</div>
+                <span class="kpi-tag tag-blue">Last image</span></div>
+            <div class="kpi {glow}"><div class="kpi-accent" style="background:{accent};"></div>
+                <div class="kpi-label">Alert Status</div>
+                <div class="kpi-val" style="font-size:22px;">{alert.upper()}</div>
+                <span class="kpi-tag {tag}">{alert.capitalize()}</span></div>
+        </div>""", unsafe_allow_html=True)
  
  
 def _render_trend_chart(result: dict, label: str = "Trend"):
-    """Render time series trend charts."""
-    import plotly.graph_objects as go
- 
+    """Render trend chart using Altair matching the main dashboard style."""
+    import altair as alt
+
+    def _make_chart(df, y_col, color, title):
+        df = df.copy()
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.sort_values("date")
+        df["date_str"] = df["date"].dt.strftime("%d %b %Y")
+        date_order = df["date_str"].tolist()
+
+        base   = alt.Chart(df).encode(
+            x=alt.X("date_str:N", sort=date_order, title=None,
+                axis=alt.Axis(labelFontSize=11, labelAngle=0, labelFont="Inter",
+                              tickColor="transparent", domainColor="rgba(0,0,0,0.1)",
+                              labelColor="#94a3b8", labelPadding=8)),
+            y=alt.Y(f"{y_col}:Q", title=None, scale=alt.Scale(zero=False),
+                axis=alt.Axis(labelFontSize=10, labelFont="JetBrains Mono",
+                              gridColor="rgba(0,0,0,0.06)", tickColor="transparent",
+                              domainColor="transparent", labelColor="#94a3b8")),
+        )
+        lines  = base.mark_line(strokeWidth=2.5, color=color, opacity=0.9)
+        points = base.mark_circle(size=55, color=color, opacity=1).encode(
+            tooltip=[alt.Tooltip("date_str:N", title="Date"),
+                     alt.Tooltip(f"{y_col}:Q", title=y_col.upper(), format=".4f")]
+        )
+        return (lines + points).properties(
+            title=alt.TitleParams(title, fontSize=13, font="Inter",
+                                  color="#64748b", fontWeight=600),
+            height=270, background="transparent"
+        ).configure_view(strokeWidth=0)
+
     if result["hydro_data"]:
         df = pd.DataFrame(result["hydro_data"])
-        df["date"] = pd.to_datetime(df["date"])
-        df = df.sort_values("date")
- 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x    = df["date"],
-            y    = df["ndti_mean"],
-            mode = "lines+markers",
-            name = "NDTI (Turbidity)",
-            line = dict(color="#00B4D8", width=2)
-        ))
- 
-        # Add threshold lines
-        fig.add_hline(y=0.05, line_dash="dash", line_color="red",
-                      annotation_text="Critical threshold")
-        fig.add_hline(y=0.0,  line_dash="dash", line_color="orange",
-                      annotation_text="Warning threshold")
- 
-        fig.update_layout(
-            title      = f"{label} — Turbidity (NDTI)",
-            xaxis_title= "Date",
-            yaxis_title= "NDTI Value",
-            height     = 300,
-            showlegend = True
+        st.altair_chart(
+            _make_chart(df, "ndti_mean", "#2563eb", f"{label} — Turbidity (NDTI)"),
+            use_container_width=True
         )
-        st.plotly_chart(fig, use_container_width=True)
- 
+
     if result["agri_data"]:
         df = pd.DataFrame(result["agri_data"])
-        df["date"] = pd.to_datetime(df["date"])
-        df = df.sort_values("date")
- 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x    = df["date"],
-            y    = df["ndvi_mean"],
-            mode = "lines+markers",
-            name = "NDVI (Vegetation)",
-            line = dict(color="#38B000", width=2)
-        ))
- 
-        # Add threshold lines
-        fig.add_hline(y=0.4, line_dash="dash", line_color="orange",
-                      annotation_text="Warning threshold")
-        fig.add_hline(y=0.2, line_dash="dash", line_color="red",
-                      annotation_text="Critical threshold")
- 
-        fig.update_layout(
-            title      = f"{label} — Vegetation Health (NDVI)",
-            xaxis_title= "Date",
-            yaxis_title= "NDVI Value",
-            height     = 300,
-            showlegend = True
+        st.altair_chart(
+            _make_chart(df, "ndvi_mean", "#16a34a", f"{label} — Vegetation (NDVI)"),
+            use_container_width=True
         )
-        st.plotly_chart(fig, use_container_width=True)
  
  
 def _render_live_map(lat: float, lon: float, zone_type: str):
     """Render live satellite map using folium."""
     from streamlit_folium import st_folium
-    st.markdown("#### Live Satellite Map")
+    st.markdown('<div class="panel-label" style="margin:20px 0 10px;">LIVE SATELLITE MAP</div>', unsafe_allow_html=True)
     with st.spinner("Loading satellite map..."):
         map_result = get_live_map(lat, lon, zone_type)
 
     if map_result["success"]:
-        st_folium(map_result["map"], height=400, use_container_width=True)
+        st_folium(map_result["map"], height=420, use_container_width=True)
     else:
-        st.warning(f"Map unavailable: {map_result['error']}")
+        st.markdown(f'<div class="alrt alrt-warn"><div class="alrt-zone">Map unavailable</div><div class="alrt-msg">{map_result["error"]}</div></div>', unsafe_allow_html=True)
  
  
 def _render_trend_summary(result: dict):
-    """Render trend summary — is it getting better or worse?"""
-    st.markdown("#### Trend Summary")
+    """Render trend summary using dashboard alert style."""
+    st.markdown('<div class="panel-label" style="margin:16px 0 12px;">TREND SUMMARY</div>', unsafe_allow_html=True)
 
     if result["hydro_data"] and len(result["hydro_data"]) >= 3:
         df     = pd.DataFrame(result["hydro_data"])
@@ -580,11 +580,11 @@ def _render_trend_summary(result: dict):
         change = last3 - first3
 
         if change > 0.02:
-            st.error(f"Turbidity is **INCREASING** — up {change:.4f} over the period. Dredging may be needed.")
+            st.markdown(f'<div class="alrt alrt-crit"><div class="alrt-zone">Turbidity INCREASING</div><div class="alrt-msg">Up {change:.4f} over the period — dredging may be needed.</div></div>', unsafe_allow_html=True)
         elif change < -0.02:
-            st.success(f"Turbidity is **DECREASING** — down {abs(change):.4f}. Conditions improving.")
+            st.markdown(f'<div style="padding:12px 18px;border-left:3px solid #16a34a;background:rgba(22,163,74,0.08);border-radius:0 6px 6px 0;margin-bottom:8px;"><div class="alrt-zone">Turbidity DECREASING</div><div class="alrt-msg">Down {abs(change):.4f} — conditions improving.</div></div>', unsafe_allow_html=True)
         else:
-            st.info(f"Turbidity is **STABLE** — change of {change:.4f} over the period.")
+            st.markdown(f'<div style="padding:12px 18px;border-left:3px solid #94a3b8;background:rgba(148,163,184,0.08);border-radius:0 6px 6px 0;margin-bottom:8px;"><div class="alrt-zone">Turbidity STABLE</div><div class="alrt-msg">Change of {change:.4f} over the period.</div></div>', unsafe_allow_html=True)
 
     if result["agri_data"] and len(result["agri_data"]) >= 3:
         df     = pd.DataFrame(result["agri_data"])
@@ -593,11 +593,11 @@ def _render_trend_summary(result: dict):
         change = last3 - first3
 
         if change < -0.05:
-            st.error(f"Vegetation is **DECLINING** — down {abs(change):.4f}. Investigate crop stress.")
+            st.markdown(f'<div class="alrt alrt-crit"><div class="alrt-zone">Vegetation DECLINING</div><div class="alrt-msg">Down {abs(change):.4f} — investigate crop stress.</div></div>', unsafe_allow_html=True)
         elif change > 0.05:
-            st.success(f"Vegetation is **IMPROVING** — up {change:.4f}. Healthy growth trend.")
+            st.markdown(f'<div style="padding:12px 18px;border-left:3px solid #16a34a;background:rgba(22,163,74,0.08);border-radius:0 6px 6px 0;margin-bottom:8px;"><div class="alrt-zone">Vegetation IMPROVING</div><div class="alrt-msg">Up {change:.4f} — healthy growth trend.</div></div>', unsafe_allow_html=True)
         else:
-            st.info(f"Vegetation is **STABLE** — change of {change:.4f} over the period.")
+            st.markdown(f'<div style="padding:12px 18px;border-left:3px solid #94a3b8;background:rgba(148,163,184,0.08);border-radius:0 6px 6px 0;margin-bottom:8px;"><div class="alrt-zone">Vegetation STABLE</div><div class="alrt-msg">Change of {change:.4f} over the period.</div></div>', unsafe_allow_html=True)
  
  
 def _render_data_table(result: dict):
@@ -618,25 +618,20 @@ def _render_data_table(result: dict):
  
  
 def _render_save_button(result: dict):
-    """Render save to dashboard button."""
+    """Render save button using dashboard styling."""
     col1, col2 = st.columns([1, 2])
- 
+
     with col1:
         if st.button("Save to Dashboard", use_container_width=True, type="primary"):
-            with st.spinner("Saving to database..."):
+            with st.spinner("Saving..."):
                 save_result = save_custom_zone(result)
- 
             if save_result["saved"]:
-                st.success(save_result["message"])
-                st.balloons()
+                st.markdown(f'<div class="sb-feedback sb-ok">{save_result["message"]}</div>', unsafe_allow_html=True)
             else:
-                st.error(save_result["message"])
- 
+                st.markdown(f'<div class="sb-feedback sb-err">{save_result["message"]}</div>', unsafe_allow_html=True)
+
     with col2:
-        st.caption(
-            f"Saving **{result['zone_name']}** adds it permanently "
-            f"to your dashboard alongside the existing monitoring zones."
-        )
+        st.markdown(f'<div style="padding:10px 0;"><span class="zmeta">Saving <b style="font-weight:600;">{result["zone_name"]}</b> adds it to your monitored zones list.</span></div>', unsafe_allow_html=True)
  
 
 

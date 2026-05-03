@@ -788,15 +788,13 @@ st.markdown("</div>", unsafe_allow_html=True)
 # ══════════════════════════════════════════════════════════════
 
 st.markdown("")
-st.markdown(f"""<div class="panel" style="overflow:hidden;"><div class="panel-head">
+st.markdown(f"""<div style="display:flex;justify-content:space-between;align-items:center;margin:24px 0 16px;">
     <span class="panel-label">LIVE LOOKUP: Analyse Any Location</span>
-    <span class="meta-tag">GEE · Powered by Sentinel-2</span></div>
-    <div class="panel-body">""", unsafe_allow_html=True)
+    <span class="meta-tag">GEE · Powered by Sentinel-2</span>
+</div>""", unsafe_allow_html=True)
 
 from src.dynamic_zone import render_search_ui
 render_search_ui()
-
-st.markdown("</div></div>", unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════════
