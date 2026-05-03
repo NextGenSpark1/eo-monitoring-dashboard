@@ -13,7 +13,6 @@ def get_css(t, theme_choice):
         color: {t['text1']};
         font-family: 'Inter', -apple-system, sans-serif;
     }}
-    div[data-testid="stMetric"] {{ display: none !important; }}
     hr {{ border-color: {t['border']} !important; margin: 14px 0 !important; }}
 
     /* ── Header ── */
@@ -285,6 +284,168 @@ def get_css(t, theme_choice):
     .note-box {{
         font-size:10px; color:{t['text4']}; font-family:'JetBrains Mono',monospace;
         background:{t['border']}; padding:4px 10px; border-radius:6px;
+    }}
+
+    /* ── Native widgets — main content (Live Lookup + any st.* calls) ── */
+
+    /* Page background & text */
+    .stMainBlockContainer, .block-container {{
+        background-color: {t['bg']} !important;
+    }}
+    .stMarkdown p, .stMarkdown span, .stMarkdown li {{
+        color: {t['text2']} !important;
+    }}
+    h1, h2, h3, h4, .stSubheader {{
+        color: {t['text1']} !important;
+    }}
+    [data-testid="stCaptionContainer"] p {{
+        color: {t['text4']} !important;
+        font-size: 12px !important;
+    }}
+
+    /* Text inputs */
+    .stTextInput input {{
+        background-color: {t['bg_card']} !important;
+        border: 1px solid {t['border']} !important;
+        border-radius: 8px !important;
+        color: {t['text1']} !important;
+        font-size: 14px !important;
+        font-family: 'Inter', sans-serif !important;
+    }}
+    .stTextInput input:focus {{
+        border-color: {t['blue']} !important;
+        box-shadow: 0 0 0 3px {t['blue_bg']} !important;
+        outline: none !important;
+    }}
+    .stTextInput input::placeholder {{ color: {t['text4']} !important; }}
+    .stTextInput label p {{ color: {t['text3']} !important; font-size: 13px !important; }}
+
+    /* Selectbox */
+    [data-baseweb="select"] > div {{
+        background-color: {t['bg_card']} !important;
+        border-color: {t['border']} !important;
+        border-radius: 8px !important;
+        color: {t['text1']} !important;
+    }}
+    [data-baseweb="select"] span {{ color: {t['text1']} !important; }}
+    [data-baseweb="popover"] ul, [data-baseweb="menu"] {{
+        background-color: {t['bg_card']} !important;
+        border: 1px solid {t['border']} !important;
+        border-radius: 8px !important;
+    }}
+    [role="option"] {{
+        background-color: {t['bg_card']} !important;
+        color: {t['text1']} !important;
+    }}
+    [role="option"]:hover {{ background-color: {t['blue_bg']} !important; }}
+    .stSelectbox label p {{ color: {t['text3']} !important; font-size: 13px !important; }}
+
+    /* Buttons — main content */
+    .stMainBlockContainer .stButton > button {{
+        background-color: {t['bg_card']} !important;
+        border: 1px solid {t['border']} !important;
+        border-radius: 8px !important;
+        color: {t['text2']} !important;
+        font-size: 13px !important;
+        font-weight: 500 !important;
+        font-family: 'Inter', sans-serif !important;
+        transition: all 0.2s !important;
+    }}
+    .stMainBlockContainer .stButton > button:hover {{
+        border-color: {t['blue']} !important;
+        color: {t['blue']} !important;
+        background-color: {t['blue_bg']} !important;
+    }}
+    .stMainBlockContainer .stButton > button[kind="primary"] {{
+        background-color: {t['blue']} !important;
+        border-color: {t['blue']} !important;
+        color: #ffffff !important;
+    }}
+    .stMainBlockContainer .stButton > button[kind="primary"]:hover {{
+        opacity: 0.88 !important;
+    }}
+
+    /* Expanders */
+    .stExpander {{
+        background-color: {t['bg_card']} !important;
+        border: 1px solid {t['border']} !important;
+        border-radius: 10px !important;
+    }}
+    .stExpander summary {{
+        color: {t['text2']} !important;
+        background-color: {t['bg_card']} !important;
+        border-radius: 10px !important;
+    }}
+    .stExpander summary:hover {{ background-color: {t['border']} !important; }}
+    .stExpander summary p {{ color: {t['text2']} !important; font-weight: 500 !important; }}
+    [data-testid="stExpanderToggleIcon"] svg {{ stroke: {t['text3']} !important; }}
+    .stExpander [data-testid="stExpanderDetails"] {{
+        background-color: {t['bg_card']} !important;
+    }}
+
+    /* Sliders — main content */
+    .stMainBlockContainer .stSlider label p {{ color: {t['text3']} !important; }}
+    .stMainBlockContainer [data-baseweb="slider"] div[role="slider"] {{
+        background-color: {t['blue']} !important;
+        border-color: {t['blue']} !important;
+    }}
+    .stMainBlockContainer [data-baseweb="slider"] > div > div:nth-child(2) {{
+        background-color: {t['blue']} !important;
+    }}
+
+    /* Metrics */
+    div[data-testid="stMetric"] {{
+        background-color: {t['bg_card']} !important;
+        border: 1px solid {t['border']} !important;
+        border-radius: 10px !important;
+        padding: 14px 18px !important;
+    }}
+    [data-testid="stMetricValue"] {{
+        color: {t['text1']} !important;
+        font-family: 'JetBrains Mono', monospace !important;
+        font-weight: 700 !important;
+    }}
+    [data-testid="stMetricLabel"] p {{
+        color: {t['text3']} !important;
+        font-size: 11px !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.05em !important;
+    }}
+
+    /* Info / warning / error / success boxes */
+    [data-testid="stNotificationContentInfo"] {{
+        background-color: {t['blue_bg']} !important;
+        border-color: {t['blue_bdr']} !important;
+        color: {t['text1']} !important;
+        border-radius: 8px !important;
+    }}
+    [data-testid="stNotificationContentWarning"] {{
+        background-color: {t['amber_bg']} !important;
+        border-color: {t['amber_bdr']} !important;
+        color: {t['text1']} !important;
+        border-radius: 8px !important;
+    }}
+    [data-testid="stNotificationContentError"] {{
+        background-color: {t['red_bg']} !important;
+        border-color: {t['red_bdr']} !important;
+        color: {t['text1']} !important;
+        border-radius: 8px !important;
+    }}
+    [data-testid="stNotificationContentSuccess"] {{
+        background-color: {t['green_bg']} !important;
+        border-color: {t['green_bdr']} !important;
+        color: {t['text1']} !important;
+        border-radius: 8px !important;
+    }}
+
+    /* Spinner */
+    [data-testid="stSpinner"] p {{ color: {t['text3']} !important; }}
+
+    /* Dataframes */
+    [data-testid="stDataFrame"] {{
+        border: 1px solid {t['border']} !important;
+        border-radius: 8px !important;
     }}
 </style>
 """

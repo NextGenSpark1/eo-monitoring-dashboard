@@ -167,6 +167,7 @@ def load_hydro_trends():
     df = read_hydro_data()
     if df.empty:
         return pd.DataFrame(columns=["date"])
+    df = df[df["zone"].isin(ZONE_COORDS.keys())]
     df = df[["date", "zone", "ndti_mean"]].copy()
     df["date"] = pd.to_datetime(df["date"])
     pivot = df.pivot(index="date", columns="zone", values="ndti_mean")
@@ -182,6 +183,7 @@ def load_agri_trends():
     df = read_agri_data()
     if df.empty:
         return pd.DataFrame(columns=["date"])
+    df = df[df["zone"].isin(ZONE_COORDS.keys())]
     df = df[["date", "zone", "ndvi_mean"]].copy()
     df["date"] = pd.to_datetime(df["date"])
     pivot = df.pivot(index="date", columns="zone", values="ndvi_mean")
