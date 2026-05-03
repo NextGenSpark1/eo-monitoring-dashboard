@@ -610,41 +610,43 @@ with map_col:
         if ndvi_url:
             folium.TileLayer(tiles=ndvi_url, attr="GEE", name="Vegetation (NDVI)",
                              overlay=True, opacity=0.85).add_to(geo_map)
-            cm.LinearColormap(colors=["#a50026","#f46d43","#fee08b","#d9ef8b","#66bd63","#1a9850","#006837"],
-                              vmin=0.1, vmax=0.85, caption="Vegetation (NDVI)").add_to(geo_map)
         if ndti_url:
             folium.TileLayer(tiles=ndti_url, attr="GEE", name="Turbidity (NDTI)",
                              overlay=True, opacity=0.9).add_to(geo_map)
-            cm.LinearColormap(colors=["#1a237e","#0288d1","#4dd0e1","#fff176","#ff8f00","#b71c1c"],
-                              vmin=-0.1, vmax=0.35, caption="Turbidity (NDTI)").add_to(geo_map)
 
     folium.TileLayer(
         tiles="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png",
         attr="© CARTO", overlay=True, control=False,
     ).add_to(geo_map)
 
-    # Add zone marker
+    # Zone marker — clean circle dot
     zone_row = all_zones[all_zones["name"] == center_cfg["name"]]
     if not zone_row.empty:
         row        = zone_row.iloc[0]
-        icon_color = {"critical": "red", "warning": "orange", "normal": "green"}.get(row["status"], "blue")
+        dot_color  = {"critical": "#dc2626", "warning": "#d97706", "normal": "#16a34a"}.get(row["status"], "#2563eb")
         val_label  = f"NDTI {row['turbidity']}" if value_col == "turbidity" else f"NDVI {row['ndvi']}"
-        sec_label  = f"NDWI: {row['ndwi']}" if value_col == "turbidity" else f"NDRE: {row['ndre']}"
+        sec_label  = f"NDWI: {row['ndwi']}"    if value_col == "turbidity" else f"NDRE: {row['ndre']}"
         popup_html = (
-            f"<div style='font-family:sans-serif;padding:6px;min-width:170px;'>"
-            f"<b style='font-size:13px;'>{row['name']}</b><br>"
+            f"<div style='font-family:sans-serif;padding:8px 10px;min-width:180px;'>"
+            f"<b style='font-size:13px;color:#0f172a;'>{row['name']}</b><br>"
             f"<span style='color:#555;font-size:11px;'>{val_label}</span><br>"
             f"<span style='color:#555;font-size:11px;'>{sec_label}</span><br>"
             f"<span style='color:#555;font-size:11px;'>Trend: {row['trend']}</span><br>"
-            f"<span style='font-size:11px;font-weight:600;color:{icon_color};'>{row['status'].upper()}</span>"
+            f"<span style='font-size:12px;font-weight:700;color:{dot_color};'>{row['status'].upper()}</span>"
             f"</div>"
         )
-        icon_name = "tint" if value_col == "turbidity" else "leaf"
         folium.Marker(
             location=[center_cfg["lat"], center_cfg["lon"]],
-            popup=folium.Popup(popup_html, max_width=210),
+            popup=folium.Popup(popup_html, max_width=220),
             tooltip=f"{row['name']} · {val_label} · {row['status'].upper()}",
-            icon=folium.Icon(color=icon_color, icon=icon_name, prefix="fa"),
+            icon=folium.DivIcon(
+                html=f"""<div style="
+                    width:18px;height:18px;border-radius:50%;
+                    background:{dot_color};border:3px solid #fff;
+                    box-shadow:0 2px 8px rgba(0,0,0,0.4),0 0 0 4px {dot_color}44;
+                "></div>""",
+                icon_size=(18, 18), icon_anchor=(9, 9),
+            ),
         ).add_to(geo_map)
 
     st_folium(geo_map, height=520, use_container_width=True)
