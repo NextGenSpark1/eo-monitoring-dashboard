@@ -278,14 +278,14 @@ def get_map_layers(lat, lon, date_str, buffer_m=2000):
     display_area = ee.Geometry.Rectangle([99.6, 0.8, 119.5, 7.5])
 
     date_obj = datetime.strptime(date_str, "%Y-%m-%d")
-    start    = (date_obj - timedelta(days=120)).strftime("%Y-%m-%d")
+    start    = (date_obj - timedelta(days=365)).strftime("%Y-%m-%d")
     end      = date_str
 
     collection = (
         ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
         .filterBounds(display_area)
         .filterDate(start, end)
-        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 70))
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 90))
     )
     if collection.size().getInfo() == 0:
         return None, None, stats_area
