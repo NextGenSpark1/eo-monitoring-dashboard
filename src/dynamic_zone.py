@@ -289,116 +289,90 @@ def save_custom_zone(analysis_result: dict) -> dict:
 def get_live_map(lat: float, lon: float, zone_type: str,
                  buffer_m: int = 2000) -> dict:
     """
-    Generate live geemap map tile for the dashboard.
-    Called separately from analyse_location() for faster rendering.
-
-    Returns:
-        dict with geemap Map object and vis_params
+    Generate live satellite map using folium + GEE tile URLs.
+    Returns a folium Map object ready for st_folium rendering.
     """
     try:
-        import geemap.foliumap as geemap
+        import folium
+        import branca.colormap as cm
 
         initialize_gee()
 
-        # Get recent image (last 30 days, wider cloud threshold for map)
-        geometry = (
-            ee.Geometry.Point([lon, lat])
-            .buffer(buffer_m)
-            .bounds()
+        display_area = ee.Geometry.Point([lon, lat]).buffer(20000).bounds()
+        end          = datetime.now()
+        start        = end - timedelta(days=60)
+
+        collection = (
+            ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+            .filterBounds(display_area)
+            .filterDate(start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
+            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 50))
         )
 
-        end   = datetime.now()
-        start = end - timedelta(days=30)
+        if collection.size().getInfo() == 0:
+            return {"success": False, "map": None, "error": "No clear Sentinel-2 image in the last 60 days"}
 
-        image, cloud_pct, last_clear = load_sentinel2(
-            geometry,
-            start.strftime("%Y-%m-%d"),
-            end.strftime("%Y-%m-%d"),
-            cloud_threshold=40    # More lenient for live map
+        image = collection.median()
+
+        geo_map = folium.Map(
+            location=[lat, lon], zoom_start=13, control_scale=True,
+            tiles="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
+            attr="© OpenStreetMap contributors © CARTO",
         )
 
-        # Initialize map
-        m = geemap.Map(
-            center         = [lat, lon],
-            zoom           = 13,
-            add_google_map = False
-        )
-        m.add_basemap("SATELLITE")
+        if zone_type in ["hydro", "both"]:
+            ndti    = compute_ndti(image)
+            vis     = {"min": -0.1, "max": 0.35, "palette": ["1a237e", "0288d1", "4dd0e1", "fff176", "ff8f00", "b71c1c"]}
+            tile_url = ndti.getMapId(vis)["tile_fetcher"].url_format
+            folium.TileLayer(tiles=tile_url, attr="Google Earth Engine", name="Turbidity (NDTI)", overlay=True).add_to(geo_map)
+            cm.LinearColormap(colors=["#1a237e","#0288d1","#4dd0e1","#fff176","#ff8f00","#b71c1c"],
+                              vmin=-0.1, vmax=0.35, caption="Turbidity Index (NDTI)").add_to(geo_map)
 
-        # Add appropriate index layer
-        if zone_type in ["hydro", "both"] and image:
-            turbidity = compute_ndti(image)
-            m.addLayer(
-                turbidity,
-                {
-                    "min":     -0.1,
-                    "max":     0.1,
-                    "palette": ["blue", "cyan", "yellow", "red"]
-                },
-                "💧 Turbidity (NDTI)"
-            )
+        if zone_type in ["agri", "both"]:
+            ndvi    = compute_ndvi(image)
+            vis     = {"min": 0.1, "max": 0.85, "palette": ["a50026", "f46d43", "fee08b", "d9ef8b", "66bd63", "1a9850", "006837"]}
+            tile_url = ndvi.getMapId(vis)["tile_fetcher"].url_format
+            folium.TileLayer(tiles=tile_url, attr="Google Earth Engine", name="Vegetation (NDVI)", overlay=True).add_to(geo_map)
+            cm.LinearColormap(colors=["#a50026","#f46d43","#fee08b","#d9ef8b","#66bd63","#1a9850","#006837"],
+                              vmin=0.1, vmax=0.85, caption="Vegetation Index (NDVI)").add_to(geo_map)
 
-        if zone_type in ["agri", "both"] and image:
-            vegetation = compute_ndvi(image)
-            m.addLayer(
-                vegetation,
-                {
-                    "min":     0,
-                    "max":     1,
-                    "palette": ["red", "yellow", "green"]
-                },
-                "🌿 Vegetation (NDVI)"
-            )
+        folium.TileLayer(
+            tiles="https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png",
+            attr="© CARTO", overlay=True, control=False,
+        ).add_to(geo_map)
+        folium.Marker(location=[lat, lon], tooltip=f"{lat:.4f}, {lon:.4f}",
+                      icon=folium.Icon(color="white", icon="map-marker")).add_to(geo_map)
 
-        # Add zone boundary
-        m.addLayer(geometry, {"color": "white"}, "📍 Zone Boundary")
-
-        return {
-            "success":      True,
-            "map":          m,
-            "cloud_pct":    cloud_pct,
-            "last_clear":   last_clear,
-            "error":        None
-        }
+        return {"success": True, "map": geo_map, "error": None}
 
     except Exception as e:
-        return {
-            "success": False,
-            "map":     None,
-            "error":   str(e)
-        }
+        return {"success": False, "map": None, "error": str(e)}
 
 
 # ============================================================
 # STREAMLIT UI COMPONENT
 # ============================================================
 def render_search_ui():
-    """
-    Complete Streamlit UI for custom zone search.
-    Uses two-phase loading for best user experience.
-    """
- 
-    st.subheader("🔍 Analyse Any Location")
+    """Complete Streamlit UI for custom zone search."""
+
+    st.subheader("Analyse Any Location")
     st.caption(
         "Search by place name or paste coordinates. "
         "Recent data loads in ~30 seconds. "
         "Full 12-month history loads in ~2 minutes."
     )
- 
-    # ── Quick suggestions ──────────────────────────────────
-    with st.expander("📍 Quick suggestions — Malaysian locations"):
+
+    # Quick suggestions
+    with st.expander("Quick suggestions — Malaysian locations"):
         suggestions = get_suggestions()
-        cols        = st.columns(3)
+        cols = st.columns(3)
         for i, s in enumerate(suggestions):
-            col   = cols[i % 3]
-            emoji = "💧" if s["type"] == "hydro" else "🌴"
-            if col.button(f"{emoji} {s['name']}", key=f"sug_{i}"):
+            label = "Hydro" if s["type"] == "hydro" else "Agri"
+            if cols[i % 3].button(f"{s['name']} ({label})", key=f"sug_{i}"):
                 st.session_state["search_input"] = s["name"]
                 st.rerun()
- 
-    # ── Search input ───────────────────────────────────────
+
     col1, col2 = st.columns([3, 1])
- 
     with col1:
         search_input = st.text_input(
             "Enter location name or coordinates",
@@ -406,133 +380,90 @@ def render_search_ui():
             placeholder = "e.g. Tasik Kenyir  or  5.0500, 102.6000",
             key         = "location_search"
         )
- 
     with col2:
         zone_type = st.selectbox(
             "Monitor for",
             options     = ["hydro", "agri", "both"],
-            format_func = lambda x: {
-                "hydro": "💧 Hydro",
-                "agri":  "🌴 Agri",
-                "both":  "🌍 Both"
-            }[x]
+            format_func = lambda x: {"hydro": "Hydro", "agri": "Agri", "both": "Both"}[x]
         )
- 
-    # Advanced options
-    with st.expander("⚙️ Advanced options"):
-        col_a, col_b = st.columns(2)
-        buffer_m = col_a.slider("Zone radius (metres)", 500, 5000, 2000, step=500)
- 
-    analyse_clicked = st.button(
-        "🛰️ Analyse Location",
-        type                = "primary",
-        use_container_width = True
-    )
- 
-    if not analyse_clicked or not search_input:
+
+    with st.expander("Advanced options"):
+        buffer_m = st.slider("Zone radius (metres)", 500, 5000, 2000, step=500)
+
+    analyse_clicked = st.button("Analyse Location", type="primary", use_container_width=True)
+
+    # Run analysis and store results in session_state
+    if analyse_clicked and search_input:
+        with st.spinner("Finding location..."):
+            location = detect_and_resolve(search_input)
+
+        if not location["valid"]:
+            st.error(location["error"])
+            return
+
+        if location.get("warning"):
+            st.warning(location["warning"])
+
+        with st.spinner("Loading recent satellite data... (~30 seconds for new locations)"):
+            quick_result = analyse_location(
+                lat=location["lat"], lon=location["lon"],
+                zone_name=location["name"], zone_type=zone_type,
+                months=3, buffer_m=buffer_m
+            )
+
+        if not quick_result["success"]:
+            st.error(f"Analysis failed: {quick_result['error']}")
+            return
+
+        # Persist results so reruns (theme change, buttons) don't wipe them
+        st.session_state["lookup_location"]    = location
+        st.session_state["lookup_quick"]       = quick_result
+        st.session_state["lookup_zone_type"]   = zone_type
+        st.session_state["lookup_buffer_m"]    = buffer_m
+        st.session_state.pop("lookup_full", None)
+
+    # Display stored results (survives any rerun)
+    if "lookup_quick" not in st.session_state:
         return
- 
-    # ── STEP 1: Resolve location ───────────────────────────
-    with st.spinner("🔍 Finding location..."):
-        location = detect_and_resolve(search_input)
- 
-    if not location["valid"]:
-        st.error(f"❌ {location['error']}")
-        return
- 
-    if location.get("warning"):
-        st.warning(location["warning"])
- 
-    st.info(
-        f"📍 **{location['name']}**  \n"
-        f"Coordinates: `{location['lat']}, {location['lon']}`"
-    )
- 
-    lat       = location["lat"]
-    lon       = location["lon"]
-    zone_name = location["name"]
- 
-    # ── STEP 2: Phase 1 — Quick preview (3 months) ────────
-    st.markdown("### 📊 Recent Data — Last 3 Months")
- 
-    phase1_container = st.container()
- 
-    with st.spinner(
-        "🛰️ Loading recent satellite data... "
-        "(~30 seconds for new locations)"
-    ):
-        quick_result = analyse_location(
-            lat       = lat,
-            lon       = lon,
-            zone_name = zone_name,
-            zone_type = zone_type,
-            months    = 3,          # Quick — only 3 months
-            buffer_m  = buffer_m
-        )
- 
-    if not quick_result["success"]:
-        st.error(f"❌ Analysis failed: {quick_result['error']}")
-        return
- 
-    if quick_result.get("from_cache"):
-        st.success("⚡ Loaded from cache!")
-    else:
-        st.success("✅ Recent data loaded!")
- 
-    # Show Phase 1 results
-    with phase1_container:
-        _render_kpis(quick_result)
-        _render_trend_chart(quick_result, label="Recent 3-Month Trend")
-        _render_live_map(lat, lon, zone_type)
- 
-    # ── STEP 3: Phase 2 — Full history (12 months) ────────
+
+    location     = st.session_state["lookup_location"]
+    quick_result = st.session_state["lookup_quick"]
+    zone_type    = st.session_state["lookup_zone_type"]
+    buffer_m     = st.session_state["lookup_buffer_m"]
+    lat, lon     = location["lat"], location["lon"]
+
+    cache_note = "  (from cache)" if quick_result.get("from_cache") else ""
+    st.info(f"**{location['name']}**  |  {lat:.4f}, {lon:.4f}{cache_note}")
+
+    st.markdown("#### Recent Data — Last 3 Months")
+    _render_kpis(quick_result)
+    _render_trend_chart(quick_result, label="Recent 3-Month Trend")
+    _render_live_map(lat, lon, zone_type)
+
     st.divider()
-    st.markdown("### 📈 Full 12-Month History")
- 
-    load_full = st.button(
-        "📅 Load Full 12-Month History",
-        help = "Takes ~2 minutes for new locations. Instant if cached."
-    )
- 
-    if load_full:
-        with st.spinner(
-            "🛰️ Loading full 12-month history... "
-            "This takes 1-2 minutes for new locations. "
-            "Will be instant next time."
-        ):
-            full_result = analyse_location(
-                lat       = lat,
-                lon       = lon,
-                zone_name = zone_name,
-                zone_type = zone_type,
-                months    = 12,      # Full history
-                buffer_m  = buffer_m
-            )
- 
-        if full_result["success"]:
-            st.success("✅ Full 12-month history loaded!")
-            _render_trend_chart(
-                full_result,
-                label = "Full 12-Month Trend"
-            )
-            _render_data_table(full_result)
- 
-            # Show summary stats
-            _render_trend_summary(full_result)
- 
-            # Save button appears after full history loads
-            st.divider()
-            _render_save_button(full_result)
-        else:
-            st.error(f"❌ Full history failed: {full_result['error']}")
- 
-    else:
-        # Show save option even with just 3 months
-        st.caption(
-            "💡 You can save the 3-month preview now, "
-            "or load full history first for better trends."
-        )
+    st.markdown("#### Full 12-Month History")
+
+    if "lookup_full" not in st.session_state:
+        if st.button("Load Full 12-Month History", help="Takes ~2 minutes for new locations. Instant if cached."):
+            with st.spinner("Loading full 12-month history... This takes 1-2 minutes for new locations."):
+                full_result = analyse_location(
+                    lat=lat, lon=lon, zone_name=location["name"],
+                    zone_type=zone_type, months=12, buffer_m=buffer_m
+                )
+            if full_result["success"]:
+                st.session_state["lookup_full"] = full_result
+                st.rerun()
+            else:
+                st.error(f"Full history failed: {full_result['error']}")
+        st.caption("You can save the 3-month preview now, or load full history first for better trends.")
         _render_save_button(quick_result)
+    else:
+        full_result = st.session_state["lookup_full"]
+        _render_trend_chart(full_result, label="Full 12-Month Trend")
+        _render_data_table(full_result)
+        _render_trend_summary(full_result)
+        st.divider()
+        _render_save_button(full_result)
  
  
 # ============================================================
@@ -546,27 +477,19 @@ def _render_kpis(result: dict):
         h = result["latest_hydro"]
         c1, c2, c3, c4 = st.columns(4)
  
-        alert_emoji = {
-            "critical": "🔴", "warning": "🟡", "normal": "🟢"
-        }.get(h.get("alert_level"), "⚪")
- 
-        c1.metric("💧 Latest NDTI",    f"{h['ndti_mean']:.4f}"  if h.get('ndti_mean')  else "N/A")
-        c2.metric("🌊 Latest NDWI",    f"{h['ndwi_mean']:.4f}"  if h.get('ndwi_mean')  else "N/A")
-        c3.metric("☁️ Cloud Cover",    f"{h['cloud_pct']}%"     if h.get('cloud_pct')  else "N/A")
-        c4.metric("⚠️ Alert",          f"{alert_emoji} {h.get('alert_level','').upper()}")
- 
+        c1.metric("Latest NDTI",   f"{h['ndti_mean']:.4f}"  if h.get('ndti_mean')  else "N/A")
+        c2.metric("Latest NDWI",   f"{h['ndwi_mean']:.4f}"  if h.get('ndwi_mean')  else "N/A")
+        c3.metric("Cloud Cover",   f"{h['cloud_pct']}%"     if h.get('cloud_pct')  else "N/A")
+        c4.metric("Alert Status",  h.get('alert_level', '').upper() or "N/A")
+
     if result["zone_type"] in ["agri", "both"] and result["latest_agri"]:
         a = result["latest_agri"]
         c1, c2, c3, c4 = st.columns(4)
- 
-        alert_emoji = {
-            "critical": "🔴", "warning": "🟡", "normal": "🟢"
-        }.get(a.get("alert_level"), "⚪")
- 
-        c1.metric("🌿 Latest NDVI",    f"{a['ndvi_mean']:.4f}"  if a.get('ndvi_mean')  else "N/A")
-        c2.metric("🍃 Latest NDRE",    f"{a['ndre_mean']:.4f}"  if a.get('ndre_mean')  else "N/A")
-        c3.metric("☁️ Cloud Cover",    f"{a['cloud_pct']}%"     if a.get('cloud_pct')  else "N/A")
-        c4.metric("⚠️ Alert",          f"{alert_emoji} {a.get('alert_level','').upper()}")
+
+        c1.metric("Latest NDVI",   f"{a['ndvi_mean']:.4f}"  if a.get('ndvi_mean')  else "N/A")
+        c2.metric("Latest NDRE",   f"{a['ndre_mean']:.4f}"  if a.get('ndre_mean')  else "N/A")
+        c3.metric("Cloud Cover",   f"{a['cloud_pct']}%"     if a.get('cloud_pct')  else "N/A")
+        c4.metric("Alert Status",  a.get('alert_level', '').upper() or "N/A")
  
  
 def _render_trend_chart(result: dict, label: str = "Trend"):
@@ -594,7 +517,7 @@ def _render_trend_chart(result: dict, label: str = "Trend"):
                       annotation_text="Warning threshold")
  
         fig.update_layout(
-            title      = f"💧 {label} — Turbidity (NDTI)",
+            title      = f"{label} — Turbidity (NDTI)",
             xaxis_title= "Date",
             yaxis_title= "NDTI Value",
             height     = 300,
@@ -623,7 +546,7 @@ def _render_trend_chart(result: dict, label: str = "Trend"):
                       annotation_text="Critical threshold")
  
         fig.update_layout(
-            title      = f"🌴 {label} — Vegetation Health (NDVI)",
+            title      = f"{label} — Vegetation Health (NDVI)",
             xaxis_title= "Date",
             yaxis_title= "NDVI Value",
             height     = 300,
@@ -633,56 +556,52 @@ def _render_trend_chart(result: dict, label: str = "Trend"):
  
  
 def _render_live_map(lat: float, lon: float, zone_type: str):
-    """Render live geemap tile."""
-    st.markdown("#### 🗺️ Live Satellite Map")
+    """Render live satellite map using folium."""
+    from streamlit_folium import st_folium
+    st.markdown("#### Live Satellite Map")
     with st.spinner("Loading satellite map..."):
         map_result = get_live_map(lat, lon, zone_type)
- 
+
     if map_result["success"]:
-        map_result["map"].to_streamlit(height=400)
-        if map_result.get("last_clear"):
-            st.caption(
-                f"Last clear view: **{map_result['last_clear']}** · "
-                f"Cloud cover: **{map_result['cloud_pct']}%**"
-            )
+        st_folium(map_result["map"], height=400, use_container_width=True)
     else:
         st.warning(f"Map unavailable: {map_result['error']}")
  
  
 def _render_trend_summary(result: dict):
     """Render trend summary — is it getting better or worse?"""
-    st.markdown("#### 📊 Trend Summary")
- 
+    st.markdown("#### Trend Summary")
+
     if result["hydro_data"] and len(result["hydro_data"]) >= 3:
         df     = pd.DataFrame(result["hydro_data"])
         first3 = df.head(3)["ndti_mean"].mean()
         last3  = df.tail(3)["ndti_mean"].mean()
         change = last3 - first3
- 
+
         if change > 0.02:
-            st.error(f"📈 Turbidity is **INCREASING** — up {change:.4f} over the period. Dredging may be needed.")
+            st.error(f"Turbidity is **INCREASING** — up {change:.4f} over the period. Dredging may be needed.")
         elif change < -0.02:
-            st.success(f"📉 Turbidity is **DECREASING** — down {abs(change):.4f}. Conditions improving.")
+            st.success(f"Turbidity is **DECREASING** — down {abs(change):.4f}. Conditions improving.")
         else:
-            st.info(f"➡️ Turbidity is **STABLE** — change of {change:.4f} over the period.")
- 
+            st.info(f"Turbidity is **STABLE** — change of {change:.4f} over the period.")
+
     if result["agri_data"] and len(result["agri_data"]) >= 3:
         df     = pd.DataFrame(result["agri_data"])
         first3 = df.head(3)["ndvi_mean"].mean()
         last3  = df.tail(3)["ndvi_mean"].mean()
         change = last3 - first3
- 
+
         if change < -0.05:
-            st.error(f"📉 Vegetation is **DECLINING** — down {abs(change):.4f}. Investigate crop stress.")
+            st.error(f"Vegetation is **DECLINING** — down {abs(change):.4f}. Investigate crop stress.")
         elif change > 0.05:
-            st.success(f"📈 Vegetation is **IMPROVING** — up {change:.4f}. Healthy growth trend.")
+            st.success(f"Vegetation is **IMPROVING** — up {change:.4f}. Healthy growth trend.")
         else:
-            st.info(f"➡️ Vegetation is **STABLE** — change of {change:.4f} over the period.")
+            st.info(f"Vegetation is **STABLE** — change of {change:.4f} over the period.")
  
  
 def _render_data_table(result: dict):
     """Render raw data in an expandable table."""
-    with st.expander("📋 View full data table"):
+    with st.expander("View full data table"):
         if result["hydro_data"]:
             st.write("**Hydro Data:**")
             st.dataframe(
@@ -702,7 +621,7 @@ def _render_save_button(result: dict):
     col1, col2 = st.columns([1, 2])
  
     with col1:
-        if st.button("💾 Save to Dashboard", use_container_width=True, type="primary"):
+        if st.button("Save to Dashboard", use_container_width=True, type="primary"):
             with st.spinner("Saving to database..."):
                 save_result = save_custom_zone(result)
  
