@@ -594,8 +594,8 @@ with map_col:
         <span class="meta-tag">Sentinel-2 L2A · Live GEE</span></div></div>""", unsafe_allow_html=True)
 
     geo_map = folium.Map(
-        location=[4.2, 102.0],
-        zoom_start=7, control_scale=True,
+        location=[4.2, 101.8],
+        zoom_start=8, control_scale=True,
         tiles="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
         attr="© OpenStreetMap contributors © CARTO",
     )
