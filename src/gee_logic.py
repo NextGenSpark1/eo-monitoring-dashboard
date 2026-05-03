@@ -1,4 +1,14 @@
-
+"""
+================================================================================
+src/gee_logic.py
+================================================================================
+Developer  : Mohamed Nawran (AI Platform Engineering)
+             Habiba Hassan (AI Analytics & Visualization)
+Description: Google Earth Engine processing — Sentinel-2 image loading,
+             index computation (NDTI, NDVI, NDWI, NDRE), statistics
+             extraction, alert classification, and live map tile generation.
+================================================================================
+"""
 
 import ee
 import json

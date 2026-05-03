@@ -3,6 +3,7 @@
 src/dynamic_zone.py
 ================================================================================
 Developer  : Mohamed Nawran (AI Platform Engineering)
+             Habiba Hassan (AI Analytics & Visualization)
 Description: Live GEE processing for ANY coordinates the client enters.
              Works with geocoder.py to form the complete dynamic zone feature.
 

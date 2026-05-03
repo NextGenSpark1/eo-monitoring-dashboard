@@ -1,4 +1,10 @@
-# EO Monitoring Dashboard — NextGen Spark
+# ================================================================================
+# app.py — EO Monitoring Dashboard
+# ================================================================================
+# Developer  : Habiba Hassan (AI Analytics & Visualization)
+# Description: Streamlit frontend — KPI panels, satellite maps, trend charts,
+#              alert system, Telegram subscription, and Live Lookup feature.
+# ================================================================================
 
 import streamlit as st
 import pandas as pd
