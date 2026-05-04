@@ -289,7 +289,7 @@ def save_custom_zone(analysis_result: dict) -> dict:
 # ============================================================
 
 def get_live_map(lat: float, lon: float, zone_type: str,
-                 buffer_m: int = 2000) -> dict:
+                 buffer_m: int = 2000, zone_name: str = "") -> dict:
     """
     Generate live satellite map — same as main dashboard (full Malaysia, NDTI + NDVI).
     Centered on the searched location, zoomed to show local detail.
@@ -323,12 +323,20 @@ def get_live_map(lat: float, lon: float, zone_type: str,
             attr="© CARTO", overlay=True, control=False,
         ).add_to(geo_map)
 
+        marker_html = (
+            f"<div style='font-family:sans-serif;padding:8px 10px;min-width:160px;'>"
+            f"<b style='font-size:13px;color:#0f172a;'>{zone_name or 'Searched Location'}</b><br>"
+            f"<span style='color:#555;font-size:11px;'>{lat:.4f}, {lon:.4f}</span>"
+            f"</div>"
+        )
         folium.Marker(
-            location=[lat, lon], tooltip=f"{lat:.4f}, {lon:.4f}",
+            location=[lat, lon],
+            popup=folium.Popup(marker_html, max_width=200),
+            tooltip=folium.Tooltip(marker_html, sticky=False),
             icon=folium.DivIcon(
                 html="""<div style="width:14px;height:14px;border-radius:50%;
                     background:#2563eb;border:3px solid #fff;
-                    box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>""",
+                    box-shadow:0 2px 8px rgba(0,0,0,0.4),0 0 0 4px #2563eb44;"></div>""",
                 icon_size=(14, 14), icon_anchor=(7, 7),
             ),
         ).add_to(geo_map)
@@ -413,7 +421,7 @@ def render_search_ui():
     st.markdown('<div class="panel-label" style="margin-bottom:14px;">RECENT DATA — LAST 3 MONTHS</div>', unsafe_allow_html=True)
     _render_kpis(quick_result)
     _render_trend_chart(quick_result, label="Recent 3-Month Trend")
-    _render_live_map(lat, lon, zone_type)
+    _render_live_map(lat, lon, zone_type, zone_name=location["name"])
 
     st.markdown('<hr style="margin:24px 0;border-color:rgba(0,0,0,0.07);">', unsafe_allow_html=True)
     st.markdown('<div class="panel-label" style="margin-bottom:14px;">FULL 12-MONTH HISTORY</div>', unsafe_allow_html=True)
@@ -545,12 +553,12 @@ def _render_trend_chart(result: dict, label: str = "Trend"):
         )
  
  
-def _render_live_map(lat: float, lon: float, zone_type: str):
+def _render_live_map(lat: float, lon: float, zone_type: str, zone_name: str = ""):
     """Render live satellite map using folium."""
     from streamlit_folium import st_folium
     st.markdown('<div class="panel-label" style="margin:20px 0 10px;">LIVE SATELLITE MAP</div>', unsafe_allow_html=True)
     with st.spinner("Loading satellite map..."):
-        map_result = get_live_map(lat, lon, zone_type)
+        map_result = get_live_map(lat, lon, zone_type, zone_name=zone_name)
 
     if map_result["success"]:
         st_folium(map_result["map"], height=420, use_container_width=True)

@@ -639,7 +639,7 @@ with map_col:
         folium.Marker(
             location=[center_cfg["lat"], center_cfg["lon"]],
             popup=folium.Popup(popup_html, max_width=220),
-            tooltip=f"{row['name']} · {val_label} · {row['status'].upper()}",
+            tooltip=folium.Tooltip(popup_html, sticky=False),
             icon=folium.DivIcon(
                 html=f"""<div style="
                     width:18px;height:18px;border-radius:50%;
