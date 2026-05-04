@@ -63,7 +63,7 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     theme_choice = st.radio("Theme", ["Light", "Dark"], horizontal=True,
-                            label_visibility="collapsed")
+                            label_visibility="collapsed", key="theme_choice")
 
 t = LIGHT if theme_choice == "Light" else DARK
 
@@ -726,20 +726,6 @@ if filtered_alerts:
 else:
     st.markdown(f"""<div style="padding:28px;text-align:center;color:{t['text4']};font-size:12px;">No alerts for the current filter</div>""", unsafe_allow_html=True)
 st.markdown("</div>", unsafe_allow_html=True)
-
-
-# ══════════════════════════════════════════════════════════════
-# LIVE LOOKUP
-# ══════════════════════════════════════════════════════════════
-
-st.markdown("")
-st.markdown(f"""<div style="display:flex;justify-content:space-between;align-items:center;margin:24px 0 16px;">
-    <span class="panel-label">LIVE LOOKUP: Analyse Any Location</span>
-    <span class="meta-tag">GEE · Powered by Sentinel-2</span>
-</div>""", unsafe_allow_html=True)
-
-from src.dynamic_zone import render_search_ui
-render_search_ui()
 
 
 # ══════════════════════════════════════════════════════════════
