@@ -40,6 +40,7 @@ import streamlit as st
 sys.path.insert(0, os.path.dirname(__file__))
 from gee_logic import (
     initialize_gee,
+    get_map_layers,
     load_sentinel2,
     compute_ndti,
     compute_ndwi,
@@ -290,62 +291,47 @@ def save_custom_zone(analysis_result: dict) -> dict:
 def get_live_map(lat: float, lon: float, zone_type: str,
                  buffer_m: int = 2000) -> dict:
     """
-    Generate live satellite map using folium + GEE tile URLs.
-    Returns a folium Map object ready for st_folium rendering.
+    Generate live satellite map — same as main dashboard (full Malaysia, NDTI + NDVI).
+    Centered on the searched location, zoomed to show local detail.
     """
     try:
         import folium
-        import branca.colormap as cm
 
         initialize_gee()
 
-        display_area = ee.Geometry.Point([lon, lat]).buffer(500000).bounds()
-        end          = datetime.now()
-        start        = end - timedelta(days=60)
-
-        collection = (
-            ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-            .filterBounds(display_area)
-            .filterDate(start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
-            .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 50))
-        )
-
-        if collection.size().getInfo() == 0:
-            return {"success": False, "map": None, "error": "No clear Sentinel-2 image in the last 60 days"}
-
-        image = collection.median()
+        # Reuse the same get_map_layers used by the main dashboard
+        ndti_img, ndvi_img, _, _ = get_map_layers(lat, lon, datetime.now().strftime("%Y-%m-%d"))
 
         geo_map = folium.Map(
-            location=[lat, lon], zoom_start=10, control_scale=True,
+            location=[lat, lon], zoom_start=12, control_scale=True,
             tiles="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
             attr="© OpenStreetMap contributors © CARTO",
         )
 
-        water_mask = compute_ndwi(image).gt(0)
-        land_mask  = compute_ndwi(image).lt(0.1)
+        ndti_vis = {"min": -0.1, "max": 0.35, "palette": ["1a237e", "0288d1", "4dd0e1", "fff176", "ff8f00", "b71c1c"]}
+        ndvi_vis = {"min": 0.1,  "max": 0.85, "palette": ["a50026", "f46d43", "fee08b", "d9ef8b", "66bd63", "1a9850", "006837"]}
 
-        if zone_type in ["hydro", "both"]:
-            ndti     = compute_ndti(image).updateMask(water_mask)
-            vis      = {"min": -0.1, "max": 0.35, "palette": ["1a237e", "0288d1", "4dd0e1", "fff176", "ff8f00", "b71c1c"]}
-            tile_url = ndti.getMapId(vis)["tile_fetcher"].url_format
-            folium.TileLayer(tiles=tile_url, attr="Google Earth Engine", name="Turbidity (NDTI)", overlay=True, opacity=0.9).add_to(geo_map)
-            cm.LinearColormap(colors=["#1a237e","#0288d1","#4dd0e1","#fff176","#ff8f00","#b71c1c"],
-                              vmin=-0.1, vmax=0.35, caption="Turbidity Index (NDTI)").add_to(geo_map)
-
-        if zone_type in ["agri", "both"]:
-            ndvi     = compute_ndvi(image).updateMask(land_mask)
-            vis      = {"min": 0.1, "max": 0.85, "palette": ["a50026", "f46d43", "fee08b", "d9ef8b", "66bd63", "1a9850", "006837"]}
-            tile_url = ndvi.getMapId(vis)["tile_fetcher"].url_format
-            folium.TileLayer(tiles=tile_url, attr="Google Earth Engine", name="Vegetation (NDVI)", overlay=True, opacity=0.9).add_to(geo_map)
-            cm.LinearColormap(colors=["#a50026","#f46d43","#fee08b","#d9ef8b","#66bd63","#1a9850","#006837"],
-                              vmin=0.1, vmax=0.85, caption="Vegetation Index (NDVI)").add_to(geo_map)
+        if ndvi_img:
+            ndvi_url = ndvi_img.getMapId(ndvi_vis)["tile_fetcher"].url_format
+            folium.TileLayer(tiles=ndvi_url, attr="GEE", name="Vegetation (NDVI)", overlay=True, opacity=0.85).add_to(geo_map)
+        if ndti_img:
+            ndti_url = ndti_img.getMapId(ndti_vis)["tile_fetcher"].url_format
+            folium.TileLayer(tiles=ndti_url, attr="GEE", name="Turbidity (NDTI)", overlay=True, opacity=0.9).add_to(geo_map)
 
         folium.TileLayer(
             tiles="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png",
             attr="© CARTO", overlay=True, control=False,
         ).add_to(geo_map)
-        folium.Marker(location=[lat, lon], tooltip=f"{lat:.4f}, {lon:.4f}",
-                      icon=folium.Icon(color="white", icon="map-marker")).add_to(geo_map)
+
+        folium.Marker(
+            location=[lat, lon], tooltip=f"{lat:.4f}, {lon:.4f}",
+            icon=folium.DivIcon(
+                html="""<div style="width:14px;height:14px;border-radius:50%;
+                    background:#2563eb;border:3px solid #fff;
+                    box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>""",
+                icon_size=(14, 14), icon_anchor=(7, 7),
+            ),
+        ).add_to(geo_map)
 
         return {"success": True, "map": geo_map, "error": None}
 
@@ -568,6 +554,27 @@ def _render_live_map(lat: float, lon: float, zone_type: str):
 
     if map_result["success"]:
         st_folium(map_result["map"], height=420, use_container_width=True)
+        st.markdown("""
+        <div style="display:flex;gap:20px;margin-top:10px;">
+            <div style="flex:1;">
+                <div style="background:linear-gradient(to right,#1a237e,#0288d1,#4dd0e1,#fff176,#ff8f00,#b71c1c);
+                    height:10px;border-radius:6px;"></div>
+                <div style="display:flex;justify-content:space-between;margin-top:4px;">
+                    <span style="font-size:10px;color:#94a3b8;">Clean water (NDTI −0.10)</span>
+                    <span style="font-size:10px;color:#94a3b8;font-weight:600;">Turbidity Index</span>
+                    <span style="font-size:10px;color:#94a3b8;">Turbid (0.35)</span>
+                </div>
+            </div>
+            <div style="flex:1;">
+                <div style="background:linear-gradient(to right,#a50026,#f46d43,#fee08b,#d9ef8b,#66bd63,#1a9850,#006837);
+                    height:10px;border-radius:6px;"></div>
+                <div style="display:flex;justify-content:space-between;margin-top:4px;">
+                    <span style="font-size:10px;color:#94a3b8;">Stressed (NDVI 0.10)</span>
+                    <span style="font-size:10px;color:#94a3b8;font-weight:600;">Vegetation Index</span>
+                    <span style="font-size:10px;color:#94a3b8;">Healthy (0.85)</span>
+                </div>
+            </div>
+        </div>""", unsafe_allow_html=True)
     else:
         st.markdown(f'<div class="alrt alrt-warn"><div class="alrt-zone">Map unavailable</div><div class="alrt-msg">{map_result["error"]}</div></div>', unsafe_allow_html=True)
  
