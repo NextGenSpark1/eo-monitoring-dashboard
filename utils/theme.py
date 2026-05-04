@@ -1,3 +1,11 @@
+# ================================================================================
+# utils/theme.py — Dashboard Theme System
+# ================================================================================
+# Developer  : Habiba Hassan (AI Analytics & Visualization)
+# Description: Light and Dark color palette definitions used throughout the
+#              dashboard for consistent theming across all components.
+# ================================================================================
+
 # Theme color palettes — DARK and LIGHT
 
 DARK = {

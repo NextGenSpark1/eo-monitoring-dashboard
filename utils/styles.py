@@ -1,3 +1,12 @@
+# ================================================================================
+# utils/styles.py — Dashboard CSS & Styling
+# ================================================================================
+# Developer  : Habiba Hassan (AI Analytics & Visualization)
+# Description: Dynamic CSS generation for the full dashboard — KPI cards, panels,
+#              charts, maps, alerts, sidebar, and native widget theming.
+#              Responds to Light/Dark mode toggle in real time.
+# ================================================================================
+
 # Dashboard CSS
 
 
