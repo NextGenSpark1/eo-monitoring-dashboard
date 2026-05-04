@@ -589,9 +589,12 @@ with map_col:
     center_cfg = RESERVOIR_CONFIG if value_col == "turbidity" else FARM_CONFIG
     map_title  = "Empangan Sultan Abu Bakar" if value_col == "turbidity" else "Felda Jengka"
 
+    ndti_url, ndvi_url, gee_error, last_image_date = load_map_tile_urls(center_cfg["lat"], center_cfg["lon"])
+
+    date_tag = f"Last image: {last_image_date}" if last_image_date else "Sentinel-2 L2A · Live GEE"
     st.markdown(f"""<div class="panel" style="margin-bottom:0;overflow:hidden;"><div class="panel-head">
         <span class="panel-label">MAP: {map_title} — Water Turbidity & Vegetation</span>
-        <span class="meta-tag">Sentinel-2 L2A · Live GEE</span></div></div>""", unsafe_allow_html=True)
+        <span class="meta-tag">Sentinel-2 L2A · {date_tag}</span></div></div>""", unsafe_allow_html=True)
 
     geo_map = folium.Map(
         location=[4.2, 101.8],
@@ -599,8 +602,6 @@ with map_col:
         tiles="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
         attr="© OpenStreetMap contributors © CARTO",
     )
-
-    ndti_url, ndvi_url, gee_error, last_image_date = load_map_tile_urls(center_cfg["lat"], center_cfg["lon"])
 
     if gee_error and not ndti_url and not ndvi_url:
         st.markdown(f"""<div style="padding:8px 16px;background:{t['amber']}22;border-left:3px solid {t['amber']};
@@ -671,8 +672,6 @@ with map_col:
             </div>
         </div>
     </div>""", unsafe_allow_html=True)
-    if last_image_date:
-        st.markdown(f'<div style="text-align:right;margin-top:6px;"><span class="meta-tag">Last Sentinel-2 image: {last_image_date}</span></div>', unsafe_allow_html=True)
 
 with details_col:
     st.markdown(f"""<div class="panel"><div class="panel-body"><div class="panel-label" style="margin-bottom:16px;">DISTRIBUTION: Zone Health</div>""", unsafe_allow_html=True)
