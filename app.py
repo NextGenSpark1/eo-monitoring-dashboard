@@ -203,13 +203,13 @@ def load_map_tile_urls(lat, lon):
     from datetime import datetime
     try:
         initialize_gee()
-        ndti_img, ndvi_img, _ = get_map_layers(lat, lon, datetime.now().strftime("%Y-%m-%d"))
+        ndti_img, ndvi_img, _, last_date = get_map_layers(lat, lon, datetime.now().strftime("%Y-%m-%d"))
         ndti_url = ndti_img.getMapId(NDTI_VIS)["tile_fetcher"].url_format if ndti_img else None
         ndvi_url = ndvi_img.getMapId(NDVI_VIS)["tile_fetcher"].url_format if ndvi_img else None
-        error    = None if (ndti_url or ndvi_url) else "No clear Sentinel-2 image in the last 120 days"
-        return ndti_url, ndvi_url, error
+        error    = None if (ndti_url or ndvi_url) else "No clear Sentinel-2 image in the last 365 days"
+        return ndti_url, ndvi_url, error, last_date
     except Exception as e:
-        return None, None, str(e)
+        return None, None, str(e), None
 
 
 def get_all_alerts(zones_df, value_col):
@@ -600,7 +600,7 @@ with map_col:
         attr="© OpenStreetMap contributors © CARTO",
     )
 
-    ndti_url, ndvi_url, gee_error = load_map_tile_urls(center_cfg["lat"], center_cfg["lon"])
+    ndti_url, ndvi_url, gee_error, last_image_date = load_map_tile_urls(center_cfg["lat"], center_cfg["lon"])
 
     if gee_error and not ndti_url and not ndvi_url:
         st.markdown(f"""<div style="padding:8px 16px;background:{t['amber']}22;border-left:3px solid {t['amber']};
@@ -671,6 +671,8 @@ with map_col:
             </div>
         </div>
     </div>""", unsafe_allow_html=True)
+    if last_image_date:
+        st.markdown(f'<div style="text-align:right;margin-top:6px;"><span class="meta-tag">Last Sentinel-2 image: {last_image_date}</span></div>', unsafe_allow_html=True)
 
 with details_col:
     st.markdown(f"""<div class="panel"><div class="panel-body"><div class="panel-label" style="margin-bottom:16px;">DISTRIBUTION: Zone Health</div>""", unsafe_allow_html=True)

@@ -295,7 +295,12 @@ def get_map_layers(lat, lon, date_str, buffer_m=2000):
     ndti = compute_ndti(image).updateMask(water_mask)
     ndvi = compute_ndvi(image).updateMask(land_mask)
 
-    return ndti, ndvi, stats_area
+    last_date = (
+        collection.sort("system:time_start", False)
+        .first().date().format("YYYY-MM-dd").getInfo()
+    )
+
+    return ndti, ndvi, stats_area, last_date
 
 
 # LIVE MAP TILE (for geemap in dashboard)
