@@ -610,17 +610,9 @@ with map_col:
         if ndvi_url:
             folium.TileLayer(tiles=ndvi_url, attr="GEE", name="Vegetation (NDVI)",
                              overlay=True, opacity=0.85).add_to(geo_map)
-            cm.LinearColormap(
-                colors=["#a50026", "#f46d43", "#fee08b", "#d9ef8b", "#66bd63", "#1a9850", "#006837"],
-                vmin=0.1, vmax=0.85, caption="Vegetation Index (NDVI) — Stressed → Healthy"
-            ).add_to(geo_map)
         if ndti_url:
             folium.TileLayer(tiles=ndti_url, attr="GEE", name="Turbidity (NDTI)",
                              overlay=True, opacity=0.9).add_to(geo_map)
-            cm.LinearColormap(
-                colors=["#1a237e", "#0288d1", "#4dd0e1", "#fff176", "#ff8f00", "#b71c1c"],
-                vmin=-0.1, vmax=0.35, caption="Turbidity Index (NDTI) — Clean → Turbid"
-            ).add_to(geo_map)
 
     folium.TileLayer(
         tiles="https://{s}.basemaps.cartocdn.com/light_only_labels/{z}/{x}/{y}{r}.png",
@@ -658,6 +650,27 @@ with map_col:
         ).add_to(geo_map)
 
     st_folium(geo_map, height=520, use_container_width=True)
+    st.markdown(f"""
+    <div style="display:flex;gap:20px;margin-top:12px;">
+        <div style="flex:1;">
+            <div style="background:linear-gradient(to right,#1a237e,#0288d1,#4dd0e1,#fff176,#ff8f00,#b71c1c);
+                height:10px;border-radius:6px;"></div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;">
+                <span style="font-size:10px;color:{t['text4']};">Clean water (NDTI −0.10)</span>
+                <span style="font-size:10px;color:{t['text4']};font-weight:600;">Turbidity Index</span>
+                <span style="font-size:10px;color:{t['text4']};">Turbid (0.35)</span>
+            </div>
+        </div>
+        <div style="flex:1;">
+            <div style="background:linear-gradient(to right,#a50026,#f46d43,#fee08b,#d9ef8b,#66bd63,#1a9850,#006837);
+                height:10px;border-radius:6px;"></div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;">
+                <span style="font-size:10px;color:{t['text4']};">Stressed (NDVI 0.10)</span>
+                <span style="font-size:10px;color:{t['text4']};font-weight:600;">Vegetation Index</span>
+                <span style="font-size:10px;color:{t['text4']};">Healthy (0.85)</span>
+            </div>
+        </div>
+    </div>""", unsafe_allow_html=True)
 
 with details_col:
     st.markdown(f"""<div class="panel"><div class="panel-body"><div class="panel-label" style="margin-bottom:16px;">DISTRIBUTION: Zone Health</div>""", unsafe_allow_html=True)
