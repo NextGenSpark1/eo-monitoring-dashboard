@@ -1,6 +1,5 @@
 earthengine-api
 geemap
-xyzservices==2024.9.0
 streamlit
 pandas
 folium
@@ -10,3 +9,4 @@ altair
 pydeck
 diskcache
 requests
+

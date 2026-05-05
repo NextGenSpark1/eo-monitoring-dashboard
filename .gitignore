@@ -31,6 +31,9 @@ Thumbs.db
 .ipynb_checkpoints/
 *.ipynb
 
+# Claude Code context 
+CLAUDE.md
+
 # Databases & Cache
 *.db
 *.sqlite
