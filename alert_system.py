@@ -1,17 +1,19 @@
-
 import sys
 import os
+import pandas as pd
 from datetime import datetime, timedelta
-
-# Add src to path so we can import our modules
-sys.path.append(os.path.join(os.path.dirname(__file__), "src"))
-
+ 
+# Add src to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
+ 
 from gee_logic import (
     initialize_gee,
     get_geometry,
     load_sentinel2,
     compute_ndti,
+    compute_ndwi,      # ← FIXED: was missing, alert_system was using compute_ndvi
     compute_ndvi,
+    compute_ndre,      # ← NEW: now properly computing NDRE for farm
     extract_stats,
     compute_alert_level,
     RESERVOIR_CONFIG,
@@ -21,136 +23,102 @@ from database import (
     init_database,
     write_hydro_data,
     write_agri_data,
-    log_alert,
-    get_all_subscribers,
+    log_alert
 )
-from telegram_helper import (
-    build_alert_message,
-    send_telegram_message,
+from telegram_helper import (   # ← NEW: real Telegram integration
+    send_critical_alert,
+    send_warning_alert
 )
-
-import pandas as pd
-
-
+ 
+ 
 # ============================================================
 # CONFIGURATION
 # ============================================================
-
-# Alert thresholds
-CRITICAL_NDTI = 0.05   # Above this = critical turbidity
-WARNING_NDTI  = 0.0    # Above this = warning turbidity
-
-# Date range for daily check — last 30 days
-TODAY      = datetime.now().strftime("%Y-%m-%d")
-MONTH_AGO  = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-
-
-# ============================================================
-# NOTIFICATION
-# ============================================================
-
-def broadcast_alert(zone, alert_level, value, value_col, module_name, date, event_label=None):
-    """
-    Send the formatted alert to every subscriber in Supabase.
-    Returns the message text so it can also be logged in the alerts_log table.
-    """
-    message = build_alert_message(
-        zone_name=zone,
-        index_value=value,
-        status=alert_level,
-        value_col=value_col,
-        module_name=module_name,
-        event_label=event_label,
-    )
-
-    subscribers = get_all_subscribers()
-    if not subscribers:
-        print("   ⚠️  No subscribers found — alert not broadcast")
-    else:
-        sent = 0
-        for chat_id in subscribers:
-            ok, _ = send_telegram_message(chat_id, message)
-            if ok:
-                sent += 1
-        print(f"   📨 Telegram broadcast sent to {sent}/{len(subscribers)} subscribers")
-
-    print(message)
-    print("-" * 40)
-    return message
-
-
+ 
+TODAY     = datetime.now().strftime("%Y-%m-%d")
+MONTH_AGO = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+ 
+ 
 # ============================================================
 # MAIN DAILY CHECK
 # ============================================================
-
+ 
 def run_daily_check():
     """
-    Main function — run by GitHub Actions every day at 2AM.
-
+    Run by GitHub Actions every day at 2AM Malaysia Time.
+ 
     Steps:
-    1. Initialize GEE with headless auth
-    2. Initialize database
-    3. Process latest satellite data for reservoir
-    4. Process latest satellite data for farm
-    5. Log any alerts
-    6. Write new data to database
+    1. Initialize GEE (headless auth via service account)
+    2. Initialize Supabase connection
+    3. Process reservoir — NDTI + NDWI
+    4. Process farm — NDVI + NDRE
+    5. Send Telegram alerts if critical/warning
+    6. Write new data to Supabase
     7. Print summary report
     """
-
+ 
     print("=" * 55)
     print(f"  TNB Siltation Monitor — Daily Check")
-    print(f"  Date: {TODAY}")
+    print(f"  Date : {TODAY}")
     print("=" * 55)
-
-    # Step 1: Initialize
+ 
+    # Initialize
     initialize_gee()
     init_database()
-
+ 
     alerts_triggered = []
     hydro_records    = []
     agri_records     = []
-
-    # -------------------------------------------------------
-    # Step 2: Process Reservoir (Empangan Sultan Abu Bakar)
-    # -------------------------------------------------------
-    print(f"\n Checking: {RESERVOIR_CONFIG['name']}")
-
-    reservoir_geometry = get_geometry(RESERVOIR_CONFIG)
+ 
+    # ── RESERVOIR: Empangan Sultan Abu Bakar ──────────────
+    print(f"\n💧 Checking: {RESERVOIR_CONFIG['name']}")
+ 
+    reservoir_geom = get_geometry(RESERVOIR_CONFIG)
     image, cloud_pct, last_clear = load_sentinel2(
-        reservoir_geometry, MONTH_AGO, TODAY, cloud_threshold=30
+        reservoir_geom, MONTH_AGO, TODAY, cloud_threshold=30
     )
-
+ 
     if image is None:
-        print("   ⚠️  No clear images available — skipping")
+        print("   ⚠️  No clear images — skipping reservoir")
     else:
-        ndti_stats = extract_stats(compute_ndti(image), reservoir_geometry, "NDTI")
-        ndwi_stats = extract_stats(compute_ndvi(image), reservoir_geometry, "NDWI")
+        # FIXED: compute_ndwi (was using compute_ndvi before — bug)
+        ndti_stats = extract_stats(compute_ndti(image), reservoir_geom, "NDTI")
+        ndwi_stats = extract_stats(compute_ndwi(image), reservoir_geom, "NDWI")
         alert      = compute_alert_level(ndti_mean=ndti_stats["NDTI_mean"])
-
+ 
         print(f"   NDTI mean    : {ndti_stats['NDTI_mean']}")
+        print(f"   NDWI mean    : {ndwi_stats['NDWI_mean']}")
         print(f"   Alert level  : {alert.upper()}")
         print(f"   Cloud cover  : {cloud_pct}%")
         print(f"   Last clear   : {last_clear}")
-
-        # Log alert if not normal
-        if alert in ["warning", "critical"]:
-            message = broadcast_alert(
-                zone        = RESERVOIR_CONFIG["name"],
-                alert_level = alert,
-                value       = ndti_stats["NDTI_mean"],
-                value_col   = "turbidity",
-                module_name = "Hydro",
-                date        = TODAY,
+ 
+        # Send real Telegram alert
+        if alert == "critical":
+            send_critical_alert(
+                zone       = RESERVOIR_CONFIG["name"],
+                ndti_value = ndti_stats["NDTI_mean"],
+                date       = TODAY
             )
+            alerts_triggered.append("critical")
+ 
+        elif alert == "warning":
+            send_warning_alert(
+                zone       = RESERVOIR_CONFIG["name"],
+                ndti_value = ndti_stats["NDTI_mean"],
+                date       = TODAY
+            )
+            alerts_triggered.append("warning")
+ 
+        # Log to Supabase alerts_log table
+        if alert in ["warning", "critical"]:
             log_alert(
                 zone        = RESERVOIR_CONFIG["name"],
                 alert_level = alert,
                 date        = TODAY,
                 ndti_mean   = ndti_stats["NDTI_mean"],
-                message     = message
+                message     = f"Daily check: {alert} turbidity detected. NDTI={ndti_stats['NDTI_mean']}"
             )
-            alerts_triggered.append(alert)
-
+ 
         hydro_records.append({
             "date":            TODAY,
             "zone":            RESERVOIR_CONFIG["name"],
@@ -158,50 +126,62 @@ def run_daily_check():
             "ndti_mean":       ndti_stats["NDTI_mean"],
             "ndti_min":        ndti_stats["NDTI_min"],
             "ndti_max":        ndti_stats["NDTI_max"],
-            "ndwi_mean":       ndwi_stats.get("NDWI_mean"),
+            "ndwi_mean":       ndwi_stats["NDWI_mean"],  # ← FIXED: correct value now
             "alert_level":     alert,
             "cloud_pct":       cloud_pct,
             "last_clear_view": last_clear
         })
-
-    # -------------------------------------------------------
-    # Step 3: Process Farm
-    # -------------------------------------------------------
+ 
+    # ── FARM: Felda Jengka ────────────────────────────────
     print(f"\n🌴 Checking: {FARM_CONFIG['name']}")
-
-    farm_geometry = get_geometry(FARM_CONFIG)
+ 
+    farm_geom = get_geometry(FARM_CONFIG)
     image, cloud_pct, last_clear = load_sentinel2(
-        farm_geometry, MONTH_AGO, TODAY, cloud_threshold=30
+        farm_geom, MONTH_AGO, TODAY, cloud_threshold=30
     )
-
+ 
     if image is None:
-        print("   ⚠️  No clear images available — skipping")
+        print("   ⚠️  No clear images — skipping farm")
     else:
-        ndvi_stats = extract_stats(compute_ndvi(image), farm_geometry, "NDVI")
-        alert      = compute_alert_level(ndvi_mean=ndvi_stats["NDVI_mean"])
-
+        ndvi_stats = extract_stats(compute_ndvi(image), farm_geom, "NDVI")
+        ndre_stats = extract_stats(compute_ndre(image), farm_geom, "NDRE")  # ← FIXED: now computed
+        alert      = compute_alert_level(
+            ndvi_mean = ndvi_stats["NDVI_mean"],
+            ndre_mean = ndre_stats["NDRE_mean"]
+        )
+ 
         print(f"   NDVI mean    : {ndvi_stats['NDVI_mean']}")
+        print(f"   NDRE mean    : {ndre_stats['NDRE_mean']}")
         print(f"   Alert level  : {alert.upper()}")
         print(f"   Cloud cover  : {cloud_pct}%")
-
-        if alert in ["warning", "critical"]:
-            message = broadcast_alert(
-                zone        = FARM_CONFIG["name"],
-                alert_level = alert,
-                value       = ndvi_stats["NDVI_mean"],
-                value_col   = "ndvi",
-                module_name = "Agriculture",
-                date        = TODAY,
+ 
+        # Send Telegram alert for vegetation stress
+        if alert == "critical":
+            from telegram_helper import send_telegram_message
+            send_telegram_message(
+                f"🔴 <b>CRITICAL VEGETATION ALERT</b>\n\n"
+                f"📍 <b>Zone:</b> {FARM_CONFIG['name']}\n"
+                f"📅 <b>Date:</b> {TODAY}\n"
+                f"🌿 <b>NDVI:</b> {ndvi_stats['NDVI_mean']:.4f}\n"
+                f"🍃 <b>NDRE:</b> {ndre_stats['NDRE_mean']:.4f}\n"
+                f"⚠️ <b>Status:</b> CRITICAL — Severe vegetation stress\n\n"
+                f"🌴 <b>Action:</b> Inspect plantation for disease or nutrient deficiency\n"
+                f"🤖 <i>TNB Siltation Monitor — Automated Alert</i>"
             )
+            alerts_triggered.append("critical")
+ 
+        elif alert == "warning":
+            alerts_triggered.append("warning")
+ 
+        if alert in ["warning", "critical"]:
             log_alert(
                 zone        = FARM_CONFIG["name"],
                 alert_level = alert,
                 date        = TODAY,
                 ndvi_mean   = ndvi_stats["NDVI_mean"],
-                message     = message,
+                message     = f"Daily check: {alert} vegetation stress. NDVI={ndvi_stats['NDVI_mean']}"
             )
-            alerts_triggered.append(alert)
-
+ 
         agri_records.append({
             "date":        TODAY,
             "zone":        FARM_CONFIG["name"],
@@ -209,36 +189,40 @@ def run_daily_check():
             "ndvi_mean":   ndvi_stats["NDVI_mean"],
             "ndvi_min":    ndvi_stats["NDVI_min"],
             "ndvi_max":    ndvi_stats["NDVI_max"],
-            "ndre_mean":   None,
+            "ndre_mean":   ndre_stats["NDRE_mean"],  # ← FIXED: real value
             "alert_level": alert,
             "cloud_pct":   cloud_pct
         })
-
-    # -------------------------------------------------------
-    # Step 4: Write to database
-    # -------------------------------------------------------
+ 
+    # ── Write to Supabase ─────────────────────────────────
     if hydro_records:
         write_hydro_data(pd.DataFrame(hydro_records))
+        print(f"\n✅ Hydro data written to Supabase")
+ 
     if agri_records:
         write_agri_data(pd.DataFrame(agri_records))
-
-    # -------------------------------------------------------
-    # Step 5: Summary report
-    # -------------------------------------------------------
+        print(f"✅ Agri data written to Supabase")
+ 
+    # ── Summary ───────────────────────────────────────────
     print("\n" + "=" * 55)
     print("  DAILY CHECK COMPLETE")
     print(f"  Alerts triggered : {len(alerts_triggered)}")
+ 
     if alerts_triggered:
         highest = "critical" if "critical" in alerts_triggered else "warning"
         print(f"  Highest severity : {highest.upper()}")
+        print(f"  Telegram alert   : ✅ Sent")
     else:
         print("  Status           : ALL ZONES NORMAL ✅")
+        print("  Telegram alert   : Not needed")
+ 
     print("=" * 55)
-
-    # Exit with code 1 if critical alert (GitHub Actions can catch this)
+ 
+    # GitHub Actions catches exit code 1 as failure
     if "critical" in alerts_triggered:
         sys.exit(1)
-
-
+ 
+ 
 if __name__ == "__main__":
     run_daily_check()
+ 

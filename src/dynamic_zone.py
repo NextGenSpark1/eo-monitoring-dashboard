@@ -376,6 +376,8 @@ def render_search_ui():
     """
     Complete Streamlit UI for custom zone search.
     Uses two-phase loading for best user experience.
+    Analysis results stored in session_state so save buttons
+    work correctly across Streamlit reruns.
     """
  
     st.subheader("🔍 Analyse Any Location")
@@ -394,6 +396,10 @@ def render_search_ui():
             emoji = "💧" if s["type"] == "hydro" else "🌴"
             if col.button(f"{emoji} {s['name']}", key=f"sug_{i}"):
                 st.session_state["search_input"] = s["name"]
+                # Clear old results when a new suggestion is picked
+                st.session_state.pop("_srch_quick", None)
+                st.session_state.pop("_srch_full",  None)
+                st.session_state.pop("_srch_meta",  None)
                 st.rerun()
  
     # ── Search input ───────────────────────────────────────
@@ -429,111 +435,151 @@ def render_search_ui():
         use_container_width = True
     )
  
-    if not analyse_clicked or not search_input:
-        return
- 
-    # ── STEP 1: Resolve location ───────────────────────────
-    with st.spinner("🔍 Finding location..."):
-        location = detect_and_resolve(search_input)
- 
-    if not location["valid"]:
-        st.error(f"❌ {location['error']}")
-        return
- 
-    if location.get("warning"):
-        st.warning(location["warning"])
- 
-    st.info(
-        f"📍 **{location['name']}**  \n"
-        f"Coordinates: `{location['lat']}, {location['lon']}`"
-    )
- 
-    lat       = location["lat"]
-    lon       = location["lon"]
-    zone_name = location["name"]
- 
-    # ── STEP 2: Phase 1 — Quick preview (3 months) ────────
-    st.markdown("### 📊 Recent Data — Last 3 Months")
- 
-    phase1_container = st.container()
- 
-    with st.spinner(
-        "🛰️ Loading recent satellite data... "
-        "(~30 seconds for new locations)"
-    ):
-        from dynamic_zone import analyse_location
-        quick_result = analyse_location(
-            lat       = lat,
-            lon       = lon,
-            zone_name = zone_name,
-            zone_type = zone_type,
-            months    = 3,          # Quick — only 3 months
-            buffer_m  = buffer_m
-        )
- 
-    if not quick_result["success"]:
-        st.error(f"❌ Analysis failed: {quick_result['error']}")
-        return
- 
-    if quick_result.get("from_cache"):
-        st.success("⚡ Loaded from cache!")
-    else:
-        st.success("✅ Recent data loaded!")
- 
-    # Show Phase 1 results
-    with phase1_container:
+    # ── STEP 1: Run analysis when button clicked ───────────
+    if analyse_clicked and search_input:
+
+        # Clear old cached results so a fresh search starts clean
+        st.session_state.pop("_srch_quick", None)
+        st.session_state.pop("_srch_full",  None)
+        st.session_state.pop("_srch_meta",  None)
+
+        with st.spinner("🔍 Finding location..."):
+            location = detect_and_resolve(search_input)
+
+        if not location["valid"]:
+            st.error(f"❌ {location['error']}")
+            return
+
+        if location.get("warning"):
+            st.warning(location["warning"])
+
+        lat       = location["lat"]
+        lon       = location["lon"]
+        zone_name = location["name"]
+
+        # Cache search metadata for use when save buttons are clicked
+        st.session_state["_srch_meta"] = {
+            "lat":       lat,
+            "lon":       lon,
+            "zone_name": zone_name,
+            "zone_type": zone_type,
+            "buffer_m":  buffer_m,
+        }
+
+        # Phase 1 — quick 3-month preview
+        st.markdown("### 📊 Recent Data — Last 3 Months")
+        with st.spinner(
+            "🛰️ Loading recent satellite data... "
+            "(~30 seconds for new locations)"
+        ):
+            from dynamic_zone import analyse_location
+            quick_result = analyse_location(
+                lat       = lat,
+                lon       = lon,
+                zone_name = zone_name,
+                zone_type = zone_type,
+                months    = 3,
+                buffer_m  = buffer_m
+            )
+
+        if not quick_result["success"]:
+            st.error(f"❌ Analysis failed: {quick_result['error']}")
+            return
+
+        # Store result in session_state — this is the key fix
+        st.session_state["_srch_quick"] = quick_result
+
+        if quick_result.get("from_cache"):
+            st.success("⚡ Loaded from cache!")
+        else:
+            st.success("✅ Recent data loaded!")
+
         _render_kpis(quick_result)
         _render_trend_chart(quick_result, label="Recent 3-Month Trend")
         _render_live_map(lat, lon, zone_type)
- 
-    # ── STEP 3: Phase 2 — Full history (12 months) ────────
+
+    # ── STEP 2: Render persisted results on subsequent reruns ──
+    # (This block runs when save/watchlist buttons are clicked,
+    #  because analyse_clicked will be False on those reruns.)
+    elif "_srch_quick" in st.session_state:
+
+        meta      = st.session_state["_srch_meta"]
+        lat       = meta["lat"]
+        lon       = meta["lon"]
+        zone_name = meta["zone_name"]
+        zone_type = meta["zone_type"]
+        buffer_m  = meta["buffer_m"]
+        quick_result = st.session_state["_srch_quick"]
+
+        st.info(
+            f"📍 **{zone_name}**  \n"
+            f"Coordinates: `{lat}, {lon}`"
+        )
+        st.markdown("### 📊 Recent Data — Last 3 Months")
+        _render_kpis(quick_result)
+        _render_trend_chart(quick_result, label="Recent 3-Month Trend")
+        _render_live_map(lat, lon, zone_type)
+
+    else:
+        # Nothing analysed yet — show nothing below the button
+        return
+
+    # ── STEP 3: Full 12-month history (always shown after analysis) ──
     st.divider()
     st.markdown("### 📈 Full 12-Month History")
- 
+
+    meta         = st.session_state["_srch_meta"]
+    lat          = meta["lat"]
+    lon          = meta["lon"]
+    zone_name    = meta["zone_name"]
+    zone_type    = meta["zone_type"]
+    buffer_m     = meta["buffer_m"]
+    quick_result = st.session_state["_srch_quick"]
+
     load_full = st.button(
         "📅 Load Full 12-Month History",
         help = "Takes ~2 minutes for new locations. Instant if cached."
     )
- 
+
     if load_full:
         with st.spinner(
             "🛰️ Loading full 12-month history... "
             "This takes 1-2 minutes for new locations. "
             "Will be instant next time."
         ):
+            from dynamic_zone import analyse_location
             full_result = analyse_location(
                 lat       = lat,
                 lon       = lon,
                 zone_name = zone_name,
                 zone_type = zone_type,
-                months    = 12,      # Full history
+                months    = 12,
                 buffer_m  = buffer_m
             )
- 
+
         if full_result["success"]:
-            st.success("✅ Full 12-month history loaded!")
-            _render_trend_chart(
-                full_result,
-                label = "Full 12-Month Trend"
-            )
-            _render_data_table(full_result)
- 
-            # Show summary stats
-            _render_trend_summary(full_result)
- 
-            # Save button appears after full history loads
-            st.divider()
-            _render_save_button(full_result)
+            # Store full result so save buttons work after this too
+            st.session_state["_srch_full"] = full_result
         else:
             st.error(f"❌ Full history failed: {full_result['error']}")
- 
+
+    # Render full history if available
+    if "_srch_full" in st.session_state:
+        full_result = st.session_state["_srch_full"]
+        if full_result["success"]:
+            st.success("✅ Full 12-month history loaded!")
+            _render_trend_chart(full_result, label="Full 12-Month Trend")
+            _render_data_table(full_result)
+            _render_trend_summary(full_result)
+            st.divider()
+            _render_save_buttons(full_result)
     else:
-        # Show save option even with just 3 months
+        # Offer save with just the 3-month data
         st.caption(
             "💡 You can save the 3-month preview now, "
             "or load full history first for better trends."
         )
-        _render_save_button(quick_result)
+        _render_save_buttons(quick_result)
  
  
 # ============================================================
@@ -700,30 +746,95 @@ def _render_data_table(result: dict):
             )
  
  
-def _render_save_button(result: dict):
-    """Render save to dashboard button."""
-    from dynamic_zone import save_custom_zone
+def _render_save_buttons(result: dict):
+    """
+    Two save options:
+    1. Save data only      → writes to hydro/agri table
+    2. Add to Watchlist    → saves data + creates persistent tab
+    """
+    from database import save_zone_to_watchlist, zone_in_watchlist
+    import streamlit as st
  
-    col1, col2 = st.columns([1, 2])
+    zone_name = result["zone_name"]
+    lat       = result["lat"]
+    lon       = result["lon"]
+    zone_type = result["zone_type"]
  
+    # Check if already in watchlist
+    already_watching = zone_in_watchlist(zone_name)
+ 
+    st.divider()
+    st.markdown("### 💾 Save Options")
+ 
+    col1, col2 = st.columns(2)
+ 
+    # ── Option 1: Save data only ──────────────────────────
     with col1:
-        if st.button("💾 Save to Dashboard", use_container_width=True, type="primary"):
-            with st.spinner("Saving to database..."):
+        st.markdown("**Save data to database**")
+        st.caption("Stores the satellite data in Supabase but doesn't add a tab.")
+ 
+        if st.button(
+            "💾 Save Data Only",
+            key                 = f"save_data_{zone_name}",
+            use_container_width = True
+        ):
+            with st.spinner("Saving data..."):
                 save_result = save_custom_zone(result)
  
             if save_result["saved"]:
                 st.success(save_result["message"])
-                st.balloons()
             else:
                 st.error(save_result["message"])
  
+    # ── Option 2: Add to Watchlist ────────────────────────
     with col2:
+        st.markdown("**Add to Watchlist**")
         st.caption(
-            f"Saving **{result['zone_name']}** adds it permanently "
-            f"to your dashboard alongside the existing monitoring zones."
+            "Saves data AND creates a persistent tab "
+            "in the dashboard — like keeping a browser tab open."
         )
  
-
+        if already_watching:
+            st.info(
+                f"✅ **{zone_name}** is already in your watchlist.  \n"
+                f"Check the tab at the top of the dashboard."
+            )
+        else:
+            if st.button(
+                "📌 Add to Watchlist",
+                key                 = f"watchlist_{zone_name}",
+                use_container_width = True,
+                type                = "primary"
+            ):
+                with st.spinner("Adding to watchlist..."):
+ 
+                    # First save the data
+                    save_result = save_custom_zone(result)
+ 
+                    # Then save zone to watchlist table
+                    watch_result = save_zone_to_watchlist(
+                        zone_name = zone_name,
+                        lat       = lat,
+                        lon       = lon,
+                        zone_type = zone_type
+                    )
+ 
+                if watch_result["saved"]:
+                    st.success(
+                        f"📌 **{zone_name}** added to watchlist!  \n"
+                        f"A new tab has been created at the top of the dashboard."
+                    )
+                    st.balloons()
+ 
+                    # Clear session cache so new tab appears immediately
+                    if "saved_zones" in st.session_state:
+                        del st.session_state["saved_zones"]
+ 
+                    st.rerun()    # Rebuild tabs immediately
+ 
+                else:
+                    st.error(watch_result["message"])
+ 
 
 # ============================================================
 # HELPER FUNCTIONS

@@ -18,7 +18,8 @@ required = [
     "src/__init__.py",
     "src/gee_logic.py",
     "src/database.py",
-    "src/utils.py",
+    "src/utilities.py",
+
     "src/telegram_helper.py",
     "src/geo_service.py",          # NEW
     "src/dynamic_zone.py",      # NEW
@@ -118,9 +119,9 @@ try:
 except Exception as e:
     print(f"   ❌ gee_logic.py import failed: {e}")
  
-# utils.py
+# utilities.py
 try:
-    from utils import (
+    from utilities import (
         parse_coordinate_string,
         get_date_windows,
         get_alert_color,
@@ -128,9 +129,10 @@ try:
         format_ndti_for_display,
         format_ndvi_for_display
     )
-    print("   ✅ utils.py — all functions imported")
+    print("   ✅ utilities.py — all functions imported")
 except Exception as e:
-    print(f"   ❌ utils.py import failed: {e}")
+    print(f"   ❌ utilities.py import failed: {e}")
+
  
 # telegram_helper.py
 try:

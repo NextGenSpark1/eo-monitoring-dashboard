@@ -480,7 +480,113 @@ def check_database_health():
 
     print(f"\n{'='*55}\n")
 
+def save_zone_to_watchlist(zone_name: str, lat: float,
+                           lon: float, zone_type: str) -> dict:
+    """
+    Save a zone to the watchlist (saved_zones table).
+    Creates a persistent tab for this zone in the dashboard.
+ 
+    Returns:
+        dict: {saved: bool, message: str}
+    """
+    client = get_supabase_client()
+ 
+    try:
+        client.table("saved_zones").upsert(
+            {
+                "zone_name": zone_name,
+                "lat":       lat,
+                "lon":       lon,
+                "zone_type": zone_type
+            },
+            on_conflict="zone_name"
+        ).execute()
+ 
+        return {
+            "saved":   True,
+            "message": f"✅ {zone_name} added to watchlist"
+        }
+ 
+    except Exception as e:
+        return {
+            "saved":   False,
+            "message": f"❌ Failed to save zone: {e}"
+        }
+ 
+ 
+def read_saved_zones() -> list:
+    """
+    Read all zones in the watchlist.
+    Used by app.py to build dynamic tabs.
 
+    Returns:
+        list of dicts with zone_name, lat, lon, zone_type, added_at
+    """
+    client = get_supabase_client()
+ 
+    try:
+        result = (
+            client.table("saved_zones")
+            .select("*")
+            .order("added_at")
+            .execute()
+            )
+        return result.data
+ 
+    except Exception as e:
+        print(f"❌ Failed to read saved zones: {e}")
+        return []
+ 
+ 
+def remove_saved_zone(zone_name: str) -> dict:
+    """
+    Remove a zone from the watchlist.
+    Called when client clicks 'Remove' button on a tab.
+ 
+    Returns:
+        dict: {removed: bool, message: str}
+    """
+    client = get_supabase_client()
+ 
+    try:
+        client.table("saved_zones").delete().eq(
+            "zone_name", zone_name
+        ).execute()
+ 
+        return {
+            "removed": True,
+            "message": f"✅ {zone_name} removed from watchlist"
+        }
+ 
+    except Exception as e:
+        return {
+            "removed": False,
+            "message": f"❌ Failed to remove zone: {e}"
+        }
+ 
+ 
+def zone_in_watchlist(zone_name: str) -> bool:
+    """
+    Check if a zone is already in the watchlist.
+    Used in Search tab to show correct button state.
+ 
+    Returns:
+        bool
+    """
+    client = get_supabase_client()
+ 
+    try:
+        result = (
+            client.table("saved_zones")
+            .select("id")
+            .eq("zone_name", zone_name)
+            .execute()
+        )
+        return len(result.data) > 0
+ 
+    except Exception:
+        return False
+ 
 
 # MAIN
 
