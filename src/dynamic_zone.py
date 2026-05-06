@@ -373,7 +373,8 @@ def render_search_ui():
         for i, s in enumerate(suggestions):
             label = "Hydro" if s["type"] == "hydro" else "Agri"
             if cols[i % 3].button(f"{s['name']} ({label})", key=f"sug_{i}"):
-                st.session_state["location_search"] = s["name"]
+                st.session_state["location_search"] = f"{s['lat']}, {s['lon']}"
+                st.session_state["suggestion_name"]  = s["name"]
                 st.rerun()
 
     col1, col2 = st.columns([3, 1])
@@ -399,6 +400,10 @@ def render_search_ui():
         if not location["valid"]:
             st.markdown(f'<div class="alrt alrt-crit"><div class="alrt-zone">Location not found</div><div class="alrt-msg">{location["error"]}</div></div>', unsafe_allow_html=True)
             return
+
+        # If user clicked a suggestion, use its proper name instead of "Custom Location (lat, lon)"
+        if st.session_state.get("suggestion_name"):
+            location["name"] = st.session_state.pop("suggestion_name")
 
         with st.spinner("Loading recent satellite data... (~30 seconds for new locations)"):
             quick_result = analyse_location(
