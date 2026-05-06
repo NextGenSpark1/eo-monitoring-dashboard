@@ -317,14 +317,17 @@ def _render_trend_charts(hydro_df, agri_df, zone_type, zone_name):
 # ============================================================
 
 def _render_map(lat, lon, zone_type, zone_name):
-    """Render live geemap tile for the zone."""
+    """Render live satellite map tile for the zone."""
+    import sys, os
+    sys.path.insert(0, os.path.dirname(__file__))
     from dynamic_zone import get_live_map
+    from streamlit_folium import st_folium
 
     with st.spinner("Loading satellite map..."):
-        map_result = get_live_map(lat, lon, zone_type)
+        map_result = get_live_map(lat, lon, zone_type, zone_name=zone_name)
 
     if map_result["success"]:
-        map_result["map"].to_streamlit(height=380)
+        st_folium(map_result["map"], height=380, use_container_width=True)
         if map_result.get("last_clear"):
             st.caption(
                 f"Last clear view: **{map_result['last_clear']}**  "

@@ -20,8 +20,9 @@ from src.database import (
     read_agri_data,
     add_subscriber,
     get_all_subscribers,
-    read_saved_zones,           # ← NEW: watchlist
+    read_saved_zones,
 )
+from src.zone_dashboard import render_zone_dashboard
 from src.telegram_helper import (
     send_telegram_message,
     send_test_alert,
@@ -34,7 +35,7 @@ from src.gee_logic import (
     RESERVOIR_CONFIG,
     FARM_CONFIG,
 )
-from src.dynamic_zone import render_search_ui
+
 
 # ──────────────────────────────────────────────────────────────
 # PAGE CONFIG
@@ -47,11 +48,8 @@ st.set_page_config(
 )
 
 # ──────────────────────────────────────────────────────────────
-# LOAD SAVED ZONES INTO SESSION STATE
-# Cache so we don't hit Supabase on every interaction.
-# Cleared on auto-refresh so new zones appear automatically.
+# SAVED ZONES — load once per session, cleared on auto-refresh
 # ──────────────────────────────────────────────────────────────
-
 if "saved_zones" not in st.session_state:
     try:
         st.session_state["saved_zones"] = read_saved_zones()
@@ -59,6 +57,14 @@ if "saved_zones" not in st.session_state:
         st.session_state["saved_zones"] = []
 
 saved_zones = st.session_state["saved_zones"]
+
+# AUTO-REFRESH
+REFRESH_INTERVAL = 300
+if "last_refresh" not in st.session_state:
+    st.session_state["last_refresh"] = time.time()
+
+time_since = time.time() - st.session_state["last_refresh"]
+time_left  = max(0, int(REFRESH_INTERVAL - time_since))
 
 # ──────────────────────────────────────────────────────────────
 # THEME SYSTEM
@@ -88,7 +94,13 @@ t = LIGHT if theme_choice == "Light" else DARK
 # ──────────────────────────────────────────────────────────────
 st.markdown(get_css(t, theme_choice), unsafe_allow_html=True)
 
-# DASHBOARD 
+st.caption(f"Auto-refreshing in {time_left // 60}m {time_left % 60}s")
+if time_since >= REFRESH_INTERVAL:
+    st.session_state["last_refresh"] = time.time()
+    if "saved_zones" in st.session_state:
+        del st.session_state["saved_zones"]
+    time.sleep(0.5)
+    st.rerun()
 
 
 # ──────────────────────────────────────────────────────────────
@@ -118,16 +130,6 @@ def compute_trend(sorted_values):
     elif current < previous - 0.01:
         return "falling"
     return "stable"
-
-
-# AUTO-REFRESH
-REFRESH_INTERVAL = 300  
-if "last_refresh" not in st.session_state:
-    st.session_state["last_refresh"] = time.time()
-
-time_since = time.time() - st.session_state["last_refresh"]
-time_left  = max(0, int(REFRESH_INTERVAL - time_since))
-
 
 
 @st.cache_data(ttl=300)
@@ -188,29 +190,12 @@ def load_agri_data():
     return pd.DataFrame(result)
 
 
-# Show countdown and auto-trigger rerun when timer hits 0
-st.caption(f" Auto-refreshing in {time_left // 60}m {time_left % 60}s")
-if time_since >= REFRESH_INTERVAL:
-    st.session_state["last_refresh"] = time.time()
-    time.sleep(0.5)   # brief pause so the user sees the update
-    st.rerun()
-
-# Page header
-# st.title("💧 TNB Siltation Monitor") # Moved up
-# st.caption("Empangan Sultan Abu Bakar · Felda Jengka — Real-Time Monitoring") # Moved up
-
-# Verify both zones loading correctly
-
-
-
-
 @st.cache_data(ttl=300)
 def load_hydro_trends():
     """Pivot hydro NDTI history into a date×zone table for the trend chart."""
     df = read_hydro_data()
     if df.empty:
         return pd.DataFrame(columns=["date"])
-    df = df[df["zone"].isin(ZONE_COORDS.keys())]
     df = df[["date", "zone", "ndti_mean"]].copy()
     df["date"] = pd.to_datetime(df["date"])
     pivot = df.pivot(index="date", columns="zone", values="ndti_mean")
@@ -226,7 +211,6 @@ def load_agri_trends():
     df = read_agri_data()
     if df.empty:
         return pd.DataFrame(columns=["date"])
-    df = df[df["zone"].isin(ZONE_COORDS.keys())]
     df = df[["date", "zone", "ndvi_mean"]].copy()
     df["date"] = pd.to_datetime(df["date"])
     pivot = df.pivot(index="date", columns="zone", values="ndvi_mean")
@@ -313,6 +297,7 @@ def classify_agri_status(zones_df, warning_threshold, critical_threshold):
 def build_map(zones_df, value_col):
     map_df = zones_df.copy()
 
+    # pydeck needs colors as (R, G, B, Alpha) tuples, not hex
     color_map = {
         "critical": (int(t['red'][1:3],16),   int(t['red'][3:5],16),   int(t['red'][5:7],16),   210),
         "warning":  (int(t['amber'][1:3],16),  int(t['amber'][3:5],16), int(t['amber'][5:7],16), 190),
@@ -435,25 +420,23 @@ def build_trend_chart(trends_df, value_col):
 
 
 # ══════════════════════════════════════════════════════════════
-# SIDEBAR — MODULE, FILTERS, THRESHOLDS, SUBSCRIPTION, WATCHLIST
+# SIDEBAR — MODULE, FILTERS, THRESHOLDS, SUBSCRIPTION
 # ══════════════════════════════════════════════════════════════
 
 with st.sidebar:
     st.markdown("---")
     st.markdown(f'<p class="sb-label">Monitoring Module</p>', unsafe_allow_html=True)
-    view_choice = st.radio("Module", ["Hydro Reservoir", "Agriculture", "Search Location"], label_visibility="collapsed")
+    view_choice = st.radio("Module", ["Hydro Reservoir", "Agriculture"], label_visibility="collapsed")
 
-
-    if view_choice != "Search Location":
-        st.markdown("---")
-        st.markdown(f'<p class="sb-label">Status Filter</p>', unsafe_allow_html=True)
-        show_normal   = st.checkbox("Normal",   value=True)
-        show_warning  = st.checkbox("Warning",  value=True)
-        show_critical = st.checkbox("Critical", value=True)
-        active_statuses = []
-        if show_normal:   active_statuses.append("normal")
-        if show_warning:  active_statuses.append("warning")
-        if show_critical: active_statuses.append("critical")
+    st.markdown("---")
+    st.markdown(f'<p class="sb-label">Status Filter</p>', unsafe_allow_html=True)
+    show_normal   = st.checkbox("Normal",   value=True)
+    show_warning  = st.checkbox("Warning",  value=True)
+    show_critical = st.checkbox("Critical", value=True)
+    active_statuses = []
+    if show_normal:   active_statuses.append("normal")
+    if show_warning:  active_statuses.append("warning")
+    if show_critical: active_statuses.append("critical")
 
     st.markdown("---")
     st.markdown(f'<p class="sb-label">Thresholds</p>', unsafe_allow_html=True)
@@ -515,36 +498,6 @@ with st.sidebar:
             st.markdown('<div class="sb-feedback sb-warn">Enter a chat ID first.</div>', unsafe_allow_html=True)
     st.markdown(f'<div style="font-size:10px;color:{t["text4"]};margin-top:8px;line-height:1.6;">Get your ID via <b style="color:{t["text3"]};">@userinfobot</b> on Telegram.</div>', unsafe_allow_html=True)
 
-    # ── NEW: Watchlist summary in sidebar ─────────────────
-    st.markdown("---")
-    st.markdown(f'<p class="sb-label">📌 Watchlist</p>', unsafe_allow_html=True)
-
-    if not saved_zones:
-        st.markdown(
-            f'<p style="font-size:11px;color:{t["text4"]};margin:0;">No zones saved yet. '
-            f'Go to <b>Search Location</b> and click <b>Add to Watchlist</b>.</p>',
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            f'<p style="font-size:11px;color:{t["text4"]};margin:0 0 8px;">'
-            f'{len(saved_zones)} zone(s) being monitored</p>',
-            unsafe_allow_html=True
-        )
-        for zone in saved_zones:
-            emoji = (
-                "💧" if zone["zone_type"] == "hydro"
-                else "🌴" if zone["zone_type"] == "agri"
-                else "🌍"
-            )
-            st.markdown(
-                f'<div style="font-size:12px;color:{t["text2"]};padding:3px 0;">'
-                f'{emoji} <b>{zone["zone_name"]}</b></div>'
-                f'<div style="font-size:10px;color:{t["text4"]};padding-bottom:4px;">'
-                f'`{zone["lat"]:.4f}, {zone["lon"]:.4f}`</div>',
-                unsafe_allow_html=True
-            )
-
     st.markdown("---")
     st.markdown(f"""<div style="font-size:10px;color:{t['text4']};line-height:1.7;padding-top:6px;">
         <strong style="color:{t['text3']};">Data Source:</strong> Sentinel-2 L2A<br>
@@ -553,26 +506,22 @@ with st.sidebar:
         <strong style="color:{t['text3']};">Version:</strong> Prototype v1.0</div>""", unsafe_allow_html=True)
 
 
-if view_choice == "Search Location":
-    st.markdown("")
-    render_search_ui()
-else:
-    # ══════════════════════════════════════════════════════════════
-    # LOAD & FILTER DATA
-    # ══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════
+# LOAD & FILTER DATA
+# ══════════════════════════════════════════════════════════════
 
-    if view_choice == "Hydro Reservoir":
-        all_zones  = classify_hydro_status(load_hydro_data(), warning_threshold, critical_threshold)
-        trends_df  = load_hydro_trends()
-        value_col  = "turbidity"
-        module_name = "Turbidity"
-        threshold_note = "Higher = worse water quality"
-    else:
-        all_zones  = classify_agri_status(load_agri_data(), warning_threshold, critical_threshold)
-        trends_df  = load_agri_trends()
-        value_col  = "ndvi"
-        module_name = "NDVI"
-        threshold_note = "Lower = vegetation stress"
+if view_choice == "Hydro Reservoir":
+    all_zones  = classify_hydro_status(load_hydro_data(), warning_threshold, critical_threshold)
+    trends_df  = load_hydro_trends()
+    value_col  = "turbidity"
+    module_name = "Turbidity"
+    threshold_note = "Higher = worse water quality"
+else:
+    all_zones  = classify_agri_status(load_agri_data(), warning_threshold, critical_threshold)
+    trends_df  = load_agri_trends()
+    value_col  = "ndvi"
+    module_name = "NDVI"
+    threshold_note = "Lower = vegetation stress"
 
 filtered_zones = all_zones[all_zones["status"].isin(active_statuses)].copy()
 total_zones    = len(all_zones)
@@ -623,9 +572,9 @@ with live_col:
         <span class="live-pill"><span class="live-dot-anim"></span>LIVE</span></div>""", unsafe_allow_html=True)
 
 
-    # ══════════════════════════════════════════════════════════════
-    # KPI CARDS
-    # ══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════
+# KPI CARDS
+# ══════════════════════════════════════════════════════════════
 
 kpi_index_label = "NDTI Index" if value_col == "turbidity" else "Vegetation Index"
 critical_badge  = '<span class="kpi-tag tag-red">Immediate attention</span>'  if num_critical > 0 else '<span class="kpi-tag tag-green">All clear</span>'
@@ -644,9 +593,9 @@ st.markdown(f"""
 </div>""", unsafe_allow_html=True)
 
 
-    # ══════════════════════════════════════════════════════════════
-    # TREND CHART
-    # ══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════
+# TREND CHART
+# ══════════════════════════════════════════════════════════════
 
 st.markdown("")
 st.markdown(f"""<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -655,9 +604,9 @@ st.markdown(f"""<div style="display:flex;justify-content:space-between;align-ite
 st.altair_chart(build_trend_chart(trends_df, value_col), use_container_width=True)
 
 
-    # ══════════════════════════════════════════════════════════════
-    # MAP + ZONE DETAILS
-    # ══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════
+# MAP + ZONE DETAILS
+# ══════════════════════════════════════════════════════════════
 
 map_col, details_col = st.columns([2, 1])
 with map_col:
@@ -785,9 +734,34 @@ with details_col:
                 <div style="text-align:right;"><div class="zval {zone_style['color']}">{zone_value}</div><div style="font-size:10px;color:{t['text4']};">{trend_arrow} {zone_row['trend']}</div></div></div></div>""", unsafe_allow_html=True)
 
 
-    # ══════════════════════════════════════════════════════════════
-    # ALERTS PANEL
-    # ══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════
+# ZONE INSPECTION — dropdown drill-down per zone
+# ══════════════════════════════════════════════════════════════
+
+st.markdown("")
+
+# Build full list: hardcoded zones + saved zones
+_all_monitored = [
+    {"zone_name": RESERVOIR_CONFIG["name"], "lat": RESERVOIR_CONFIG["lat"],
+     "lon": RESERVOIR_CONFIG["lon"], "zone_type": "hydro", "added_at": ""},
+    {"zone_name": FARM_CONFIG["name"], "lat": FARM_CONFIG["lat"],
+     "lon": FARM_CONFIG["lon"], "zone_type": "agri", "added_at": ""},
+] + [z for z in saved_zones if z["zone_name"] not in
+     (RESERVOIR_CONFIG["name"], FARM_CONFIG["name"])]
+
+_zone_names = ["— select a zone to inspect —"] + [z["zone_name"] for z in _all_monitored]
+_selected   = st.selectbox("Inspect a zone", _zone_names,
+                           label_visibility="collapsed", key="zone_inspect_select")
+
+if _selected and _selected != "— select a zone to inspect —":
+    _zone_dict = next((z for z in _all_monitored if z["zone_name"] == _selected), None)
+    if _zone_dict:
+        with st.expander(f"Zone Detail — {_selected}", expanded=True):
+            render_zone_dashboard(_zone_dict)
+
+# ══════════════════════════════════════════════════════════════
+# ALERTS PANEL
+# ══════════════════════════════════════════════════════════════
 
 st.markdown("")
 critical_alerts  = [alert for alert in filtered_alerts if alert["severity"] == "critical"]
@@ -814,4 +788,3 @@ st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("")
 st.markdown(f"""<div style="text-align:center;padding:24px 0 16px;border-top:1px solid {t['border']};margin-top:24px;">
     <span style="font-size:11px;color:{t['text4']};">NextGen Spark Sdn Bhd · EO Monitoring Prototype v1.0 · Powered by Sentinel-2 & Google Earth Engine</span></div>""", unsafe_allow_html=True)
-

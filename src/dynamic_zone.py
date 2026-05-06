@@ -257,7 +257,7 @@ def save_custom_zone(analysis_result: dict) -> dict:
         }
 
     try:
-        from database import write_hydro_data, write_agri_data
+        from database import write_hydro_data, write_agri_data, save_zone_to_watchlist
 
         saved_count = 0
 
@@ -270,6 +270,19 @@ def save_custom_zone(analysis_result: dict) -> dict:
             df = pd.DataFrame(analysis_result["agri_data"])
             write_agri_data(df)
             saved_count += len(df)
+
+        # Save zone to watchlist so main dashboard tracks it
+        zone_type = (
+            "both"  if analysis_result["hydro_data"] and analysis_result["agri_data"] else
+            "hydro" if analysis_result["hydro_data"] else
+            "agri"
+        )
+        save_zone_to_watchlist(
+            zone_name = analysis_result["zone_name"],
+            lat       = analysis_result["lat"],
+            lon       = analysis_result["lon"],
+            zone_type = zone_type,
+        )
 
         return {
             "saved":   True,
@@ -351,27 +364,16 @@ def get_live_map(lat: float, lon: float, zone_type: str,
 # STREAMLIT UI COMPONENT
 # ============================================================
 def render_search_ui():
-    """
-    Complete Streamlit UI for custom zone search.
-    Uses two-phase loading for best user experience.
-    """
- 
-    st.subheader("🔍 Analyse Any Location")
-    st.caption(
-        "Search by place name or paste coordinates. "
-        "Recent data loads in ~30 seconds. "
-        "Full 12-month history loads in ~2 minutes."
-    )
- 
-    # ── Quick suggestions ──────────────────────────────────
-    with st.expander("📍 Quick suggestions — Malaysian locations"):
+    """Complete Streamlit UI for custom zone search."""
+
+    # Quick suggestions
+    with st.expander("Quick suggestions — Malaysian locations"):
         suggestions = get_suggestions()
         cols = st.columns(3)
         for i, s in enumerate(suggestions):
-            col   = cols[i % 3]
-            emoji = "💧" if s["type"] == "hydro" else "🌴"
-            if col.button(f"{emoji} {s['name']}", key=f"sug_{i}"):
-                st.session_state["search_input"] = s["name"]
+            label = "Hydro" if s["type"] == "hydro" else "Agri"
+            if cols[i % 3].button(f"{s['name']} ({label})", key=f"sug_{i}"):
+                st.session_state["location_search"] = s["name"]
                 st.rerun()
 
     col1, col2 = st.columns([3, 1])
@@ -387,123 +389,76 @@ def render_search_ui():
             options     = ["hydro", "agri", "both"],
             format_func = lambda x: {"hydro": "Hydro", "agri": "Agri", "both": "Both"}[x]
         )
- 
-    # Advanced options
-    with st.expander("⚙️ Advanced options"):
-        col_a, col_b = st.columns(2)
-        buffer_m = col_a.slider("Zone radius (metres)", 500, 5000, 2000, step=500)
- 
-    analyse_clicked = st.button(
-        "🛰️ Analyse Location",
-        type                = "primary",
-        use_container_width = True
-    )
- 
-    if not analyse_clicked or not search_input:
-        return
- 
-    # ── STEP 1: Resolve location ───────────────────────────
-    with st.spinner("🔍 Finding location..."):
-        location = detect_and_resolve(search_input)
- 
-    if not location["valid"]:
-        st.error(f"❌ {location['error']}")
-        return
- 
-    if location.get("warning"):
-        st.warning(location["warning"])
- 
-    st.info(
-        f"📍 **{location['name']}**  \n"
-        f"Coordinates: `{location['lat']}, {location['lon']}`"
-    )
- 
-    lat       = location["lat"]
-    lon       = location["lon"]
-    zone_name = location["name"]
- 
-    # ── STEP 2: Phase 1 — Quick preview (3 months) ────────
-    st.markdown("### 📊 Recent Data — Last 3 Months")
- 
-    phase1_container = st.container()
- 
-    with st.spinner(
-        "🛰️ Loading recent satellite data... "
-        "(~30 seconds for new locations)"
-    ):
-        from dynamic_zone import analyse_location
-        quick_result = analyse_location(
-            lat       = lat,
-            lon       = lon,
-            zone_name = zone_name,
-            zone_type = zone_type,
-            months    = 3,          # Quick — only 3 months
-            buffer_m  = buffer_m
-        )
- 
-    if not quick_result["success"]:
-        st.error(f"❌ Analysis failed: {quick_result['error']}")
-        return
- 
-    if quick_result.get("from_cache"):
-        st.success("⚡ Loaded from cache!")
-    else:
-        st.success("✅ Recent data loaded!")
- 
-    # Show Phase 1 results
-    with phase1_container:
-        _render_kpis(quick_result)
-        _render_trend_chart(quick_result, label="Recent 3-Month Trend")
-        _render_live_map(lat, lon, zone_type)
- 
-    # ── STEP 3: Phase 2 — Full history (12 months) ────────
-    st.divider()
-    st.markdown("### 📈 Full 12-Month History")
- 
-    load_full = st.button(
-        "📅 Load Full 12-Month History",
-        help = "Takes ~2 minutes for new locations. Instant if cached."
-    )
- 
-    if load_full:
-        with st.spinner(
-            "🛰️ Loading full 12-month history... "
-            "This takes 1-2 minutes for new locations. "
-            "Will be instant next time."
-        ):
-            full_result = analyse_location(
-                lat       = lat,
-                lon       = lon,
-                zone_name = zone_name,
-                zone_type = zone_type,
-                months    = 12,      # Full history
-                buffer_m  = buffer_m
+
+    analyse_clicked = st.button("Analyse Location", type="primary", use_container_width=True)
+
+    if analyse_clicked and search_input:
+        with st.spinner("Finding location..."):
+            location = detect_and_resolve(search_input)
+
+        if not location["valid"]:
+            st.markdown(f'<div class="alrt alrt-crit"><div class="alrt-zone">Location not found</div><div class="alrt-msg">{location["error"]}</div></div>', unsafe_allow_html=True)
+            return
+
+        with st.spinner("Loading recent satellite data... (~30 seconds for new locations)"):
+            quick_result = analyse_location(
+                lat=location["lat"], lon=location["lon"],
+                zone_name=location["name"], zone_type=zone_type,
+                months=3, buffer_m=2000
             )
- 
-        if full_result["success"]:
-            st.success("✅ Full 12-month history loaded!")
-            _render_trend_chart(
-                full_result,
-                label = "Full 12-Month Trend"
-            )
-            _render_data_table(full_result)
- 
-            # Show summary stats
-            _render_trend_summary(full_result)
- 
-            # Save button appears after full history loads
-            st.divider()
-            _render_save_button(full_result)
-        else:
-            st.error(f"❌ Full history failed: {full_result['error']}")
- 
-    else:
-        # Show save option even with just 3 months
-        st.caption(
-            "💡 You can save the 3-month preview now, "
-            "or load full history first for better trends."
-        )
+
+        if not quick_result["success"]:
+            st.markdown(f'<div class="alrt alrt-crit"><div class="alrt-zone">Analysis failed</div><div class="alrt-msg">{quick_result["error"]}</div></div>', unsafe_allow_html=True)
+            return
+
+        st.session_state["lookup_location"]  = location
+        st.session_state["lookup_quick"]     = quick_result
+        st.session_state["lookup_zone_type"] = zone_type
+        st.session_state.pop("lookup_full", None)
+
+    if "lookup_quick" not in st.session_state:
+        return
+
+    location     = st.session_state["lookup_location"]
+    quick_result = st.session_state["lookup_quick"]
+    zone_type    = st.session_state["lookup_zone_type"]
+    lat, lon     = location["lat"], location["lon"]
+    cache_note   = " · from cache" if quick_result.get("from_cache") else ""
+
+    st.markdown(f"""<div style="margin:16px 0 20px;padding:12px 18px;border-radius:10px;
+        border-left:3px solid #2563eb;background:rgba(37,99,235,0.06);">
+        <span style="font-size:14px;font-weight:600;">{location['name']}</span>
+        <span class="meta-tag" style="margin-left:12px;">{lat:.4f}, {lon:.4f}{cache_note}</span>
+    </div>""", unsafe_allow_html=True)
+
+    st.markdown('<div class="panel-label" style="margin-bottom:14px;">RECENT DATA — LAST 3 MONTHS</div>', unsafe_allow_html=True)
+    _render_kpis(quick_result)
+    _render_trend_chart(quick_result, label="Recent 3-Month Trend")
+    _render_live_map(lat, lon, zone_type, zone_name=location["name"])
+
+    st.markdown('<hr style="margin:24px 0;border-color:rgba(0,0,0,0.07);">', unsafe_allow_html=True)
+    st.markdown('<div class="panel-label" style="margin-bottom:14px;">FULL 12-MONTH HISTORY</div>', unsafe_allow_html=True)
+
+    if "lookup_full" not in st.session_state:
+        if st.button("Load Full 12-Month History", help="Takes ~2 minutes for new locations. Instant if cached."):
+            with st.spinner("Loading full 12-month history..."):
+                full_result = analyse_location(
+                    lat=lat, lon=lon, zone_name=location["name"],
+                    zone_type=zone_type, months=12, buffer_m=2000
+                )
+            if full_result["success"]:
+                st.session_state["lookup_full"] = full_result
+                st.rerun()
+            else:
+                st.markdown(f'<div class="alrt alrt-crit"><div class="alrt-zone">Failed</div><div class="alrt-msg">{full_result["error"]}</div></div>', unsafe_allow_html=True)
         _render_save_button(quick_result)
+    else:
+        full_result = st.session_state["lookup_full"]
+        _render_trend_chart(full_result, label="Full 12-Month Trend")
+        _render_data_table(full_result)
+        _render_trend_summary(full_result)
+        st.markdown('<hr style="margin:16px 0;border-color:rgba(0,0,0,0.07);">', unsafe_allow_html=True)
+        _render_save_button(full_result)
  
  
 # ============================================================
@@ -694,26 +649,20 @@ def _render_data_table(result: dict):
  
  
 def _render_save_button(result: dict):
-    """Render save to dashboard button."""
-    from dynamic_zone import save_custom_zone
- 
+    """Render save button using dashboard styling."""
     col1, col2 = st.columns([1, 2])
- 
+
     with col1:
-        if st.button("💾 Save to Dashboard", use_container_width=True, type="primary"):
-            with st.spinner("Saving to database..."):
+        if st.button("Save to Dashboard", use_container_width=True, type="primary"):
+            with st.spinner("Saving..."):
                 save_result = save_custom_zone(result)
             if save_result["saved"]:
-                st.success(save_result["message"])
-                st.balloons()
+                st.markdown(f'<div class="sb-feedback sb-ok">{save_result["message"]}</div>', unsafe_allow_html=True)
             else:
-                st.error(save_result["message"])
- 
+                st.markdown(f'<div class="sb-feedback sb-err">{save_result["message"]}</div>', unsafe_allow_html=True)
+
     with col2:
-        st.caption(
-            f"Saving **{result['zone_name']}** adds it permanently "
-            f"to your dashboard alongside the existing monitoring zones."
-        )
+        st.markdown(f'<div style="padding:10px 0;"><span class="zmeta">Saving <b style="font-weight:600;">{result["zone_name"]}</b> adds it to your monitored zones list.</span></div>', unsafe_allow_html=True)
  
 
 
