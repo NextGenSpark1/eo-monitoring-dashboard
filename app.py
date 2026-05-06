@@ -402,7 +402,10 @@ def build_trend_chart(trends_df, value_col):
     long_df = long_df.dropna(subset=[value_col.upper()])
     date_order  = trends_df["date"].tolist()
     color_scale = alt.Scale(range=[t['green'], t['amber'], t['red'], t['blue'], "#a78bfa", "#f472b6"])
-    y_domain    = [0, 0.85] if value_col == "ndvi" else [0, 0.8]
+    y_min    = long_df[value_col.upper()].min()
+    y_max    = long_df[value_col.upper()].max()
+    y_pad    = max(0.05, (y_max - y_min) * 0.15)
+    y_domain = [round(y_min - y_pad, 2), round(y_max + y_pad, 2)]
 
     base = alt.Chart(long_df).encode(
         x=alt.X("date:N", sort=date_order, title=None,
@@ -671,13 +674,12 @@ with map_col:
         attr="© CARTO", overlay=True, control=False,
     ).add_to(geo_map)
 
-    # Zone marker — clean circle dot
-    zone_row = all_zones[all_zones["name"] == center_cfg["name"]]
-    if not zone_row.empty:
-        row        = zone_row.iloc[0]
-        dot_color  = {"critical": "#dc2626", "warning": "#d97706", "normal": "#16a34a"}.get(row["status"], "#2563eb")
-        val_label  = f"NDTI {row['turbidity']}" if value_col == "turbidity" else f"NDVI {row['ndvi']}"
-        sec_label  = f"NDWI: {row['ndwi']}"    if value_col == "turbidity" else f"NDRE: {row['ndre']}"
+    # Zone markers — one dot per zone in all_zones
+    for _, row in all_zones.iterrows():
+        dot_color = {"critical": "#dc2626", "warning": "#d97706", "normal": "#16a34a"}.get(row["status"], "#2563eb")
+        val_label = f"NDTI {row['turbidity']}" if value_col == "turbidity" else f"NDVI {row['ndvi']}"
+        sec_val   = row['ndwi'] if value_col == "turbidity" else row['ndre']
+        sec_label = f"{'NDWI' if value_col == 'turbidity' else 'NDRE'}: {sec_val if pd.notna(sec_val) else 'N/A'}"
         popup_html = (
             f"<div style='font-family:sans-serif;padding:8px 10px;min-width:180px;'>"
             f"<b style='font-size:13px;color:#0f172a;'>{row['name']}</b><br>"
@@ -688,7 +690,7 @@ with map_col:
             f"</div>"
         )
         folium.Marker(
-            location=[center_cfg["lat"], center_cfg["lon"]],
+            location=[row["lat"], row["lon"]],
             popup=folium.Popup(popup_html, max_width=220),
             tooltip=folium.Tooltip(popup_html, sticky=False),
             icon=folium.DivIcon(
@@ -783,7 +785,7 @@ if _selected and _selected != "— select a zone to inspect —":
     _zone_dict = next((z for z in _module_zones if z["zone_name"] == _selected), None)
     if _zone_dict:
         with st.expander(f"Zone Detail — {_selected}", expanded=True):
-            render_zone_dashboard(_zone_dict)
+            render_zone_dashboard(_zone_dict, t)
 
 # ══════════════════════════════════════════════════════════════
 # ALERTS PANEL
