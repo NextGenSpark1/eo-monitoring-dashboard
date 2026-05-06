@@ -11,6 +11,7 @@ import pandas as pd
 import pydeck as pdk
 import altair as alt
 import datetime
+import time
 
 from utils.theme import DARK, LIGHT
 from utils.styles import get_css
@@ -88,8 +89,6 @@ t = LIGHT if theme_choice == "Light" else DARK
 st.markdown(get_css(t, theme_choice), unsafe_allow_html=True)
 
 # DASHBOARD 
-st.title("TNB Siltation Monitor")
-st.caption("Empangan Sultan Abu Bakar — Real-Time Turbidity & Vegetation Monitoring")
 
 
 # ──────────────────────────────────────────────────────────────
