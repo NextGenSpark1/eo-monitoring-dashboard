@@ -408,10 +408,10 @@ def build_trend_chart(trends_df, value_col):
 
     base = alt.Chart(long_df).encode(
         x=alt.X("date:T", title=None,
-            axis=alt.Axis(format="%b '%y", tickCount="month",
+            axis=alt.Axis(format="%d %b '%y", tickCount={"interval": "day", "step": 10},
                           labelColor=t['text4'], labelFontSize=11, labelFont="Inter",
                           tickColor="transparent", domainColor=t['border'],
-                          labelAngle=0, labelPadding=10)),
+                          labelAngle=-30, labelPadding=6)),
         y=alt.Y(f"{value_col.upper()}:Q", scale=alt.Scale(domain=y_domain), title=None,
             axis=alt.Axis(labelColor=t['text4'], labelFontSize=10, labelFont="JetBrains Mono",
                           gridColor=t['chart_grid'], tickColor="transparent", domainColor="transparent")),
@@ -423,7 +423,7 @@ def build_trend_chart(trends_df, value_col):
     lines  = base.mark_line(strokeWidth=2.5, opacity=0.9)
     points = base.mark_circle(size=50, opacity=1).encode(
         tooltip=[
-            alt.Tooltip("date:N",                title="Date"),
+            alt.Tooltip("date:T",                title="Date", format="%d %b %Y"),
             alt.Tooltip("Zone:N",                title="Zone"),
             alt.Tooltip(f"{value_col.upper()}:Q", title=value_col.upper(), format=".4f"),
         ]
