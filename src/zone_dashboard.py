@@ -49,7 +49,7 @@ def render_zone_dashboard(zone: dict, t: dict = None):
                 <span style="font-size:11px;color:{_t['text4']};margin-left:10px;">{type_label}</span>
             </div>
             <div style="font-size:11px;color:{_t['text3']};">
-                {lat:.4f}, {lon:.4f} · Added: {added_at[:10] if added_at else 'N/A'}
+                {lat:.4f}, {lon:.4f}
             </div>""",
             unsafe_allow_html=True
         )

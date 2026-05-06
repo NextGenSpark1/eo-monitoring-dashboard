@@ -408,10 +408,10 @@ def build_trend_chart(trends_df, value_col):
 
     base = alt.Chart(long_df).encode(
         x=alt.X("date:T", title=None,
-            axis=alt.Axis(format="%d %b '%y", tickCount={"interval": "day", "step": 10},
+            axis=alt.Axis(format="%b '%y", tickCount="month",
                           labelColor=t['text4'], labelFontSize=11, labelFont="Inter",
                           tickColor="transparent", domainColor=t['border'],
-                          labelAngle=-30, labelPadding=6)),
+                          labelAngle=0, labelPadding=10)),
         y=alt.Y(f"{value_col.upper()}:Q", scale=alt.Scale(domain=y_domain), title=None,
             axis=alt.Axis(labelColor=t['text4'], labelFontSize=10, labelFont="JetBrains Mono",
                           gridColor=t['chart_grid'], tickColor="transparent", domainColor="transparent")),
