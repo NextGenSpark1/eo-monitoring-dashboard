@@ -644,9 +644,7 @@ st.markdown("")
 st.markdown(f"""<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
     <span class="panel-label" style="margin:0;">TREND: {module_name} — Historical Readings</span>
     <span class="note-box">{threshold_note}</span></div>""", unsafe_allow_html=True)
-_warn_thresh = 0.0  if value_col == "turbidity" else 0.4
-_crit_thresh = 0.05 if value_col == "turbidity" else 0.2
-st.altair_chart(build_trend_chart(trends_df, value_col, _warn_thresh, _crit_thresh), use_container_width=True)
+st.altair_chart(build_trend_chart(trends_df, value_col, warning_threshold, critical_threshold), use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -656,7 +654,6 @@ st.altair_chart(build_trend_chart(trends_df, value_col, _warn_thresh, _crit_thre
 map_col, details_col = st.columns([2, 1])
 with map_col:
     import folium
-    import branca.colormap as cm
     from streamlit_folium import st_folium
 
     center_cfg = RESERVOIR_CONFIG if value_col == "turbidity" else FARM_CONFIG
