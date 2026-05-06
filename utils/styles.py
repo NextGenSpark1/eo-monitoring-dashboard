@@ -58,6 +58,20 @@ def get_css(t, theme_choice):
         background-color: {t['bg_sidebar']} !important;
         border-right: 1px solid {t['border']};
     }}
+    /* Page navigation links */
+    section[data-testid="stSidebar"] nav a,
+    section[data-testid="stSidebar"] nav a span,
+    section[data-testid="stSidebar"] nav li,
+    section[data-testid="stSidebar"] nav li span,
+    [data-testid="stSidebarNavLink"] span,
+    [data-testid="stSidebarNavLink"] p {{
+        color: {t['sb_text']} !important;
+        font-size: 13px !important;
+    }}
+    [data-testid="stSidebarNavLink"]:hover span,
+    [data-testid="stSidebarNavLink"]:hover p {{
+        color: {t['blue']} !important;
+    }}
     section[data-testid="stSidebar"] .stMarkdown p,
     section[data-testid="stSidebar"] .stMarkdown li,
     section[data-testid="stSidebar"] .stMarkdown span {{
@@ -350,8 +364,8 @@ def get_css(t, theme_choice):
     .stSelectbox label p {{ color: {t['text3']} !important; font-size: 13px !important; }}
     .stSelectbox > div > div {{ cursor: pointer !important; }}
 
-    /* Buttons — main content */
-    .stMainBlockContainer .stButton > button {{
+    /* Buttons — all content areas */
+    .stButton > button {{
         background-color: {t['bg_card']} !important;
         border: 1px solid {t['border']} !important;
         border-radius: 8px !important;
@@ -361,17 +375,17 @@ def get_css(t, theme_choice):
         font-family: 'Inter', sans-serif !important;
         transition: all 0.2s !important;
     }}
-    .stMainBlockContainer .stButton > button:hover {{
+    .stButton > button:hover {{
         border-color: {t['blue']} !important;
         color: {t['blue']} !important;
         background-color: {t['blue_bg']} !important;
     }}
-    .stMainBlockContainer .stButton > button[kind="primary"] {{
+    .stButton > button[kind="primary"] {{
         background-color: {t['blue']} !important;
         border-color: {t['blue']} !important;
         color: #ffffff !important;
     }}
-    .stMainBlockContainer .stButton > button[kind="primary"]:hover {{
+    .stButton > button[kind="primary"]:hover {{
         opacity: 0.88 !important;
     }}
 

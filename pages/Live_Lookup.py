@@ -35,18 +35,17 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    # Persist theme across pages via session_state
-    current_theme = st.session_state.get("theme_choice", "Light")
-    theme_choice  = st.radio("Theme", ["Light", "Dark"], horizontal=True,
-                             label_visibility="collapsed", key="theme_choice",
-                             index=0 if current_theme == "Light" else 1)
+    theme_choice = st.radio("Theme", ["Light", "Dark"], horizontal=True,
+                            label_visibility="collapsed", key="theme_choice")
 
+    _t_sidebar = LIGHT if theme_choice == "Light" else DARK
     st.markdown("---")
-    st.markdown(f"""<div style="font-size:10px;line-height:1.7;padding-top:6px;">
-        <strong>Data Source:</strong> Sentinel-2 L2A<br>
-        <strong>Revisit:</strong> 5-day cycle<br>
-        <strong>Processing:</strong> Google Earth Engine<br>
-        <strong>Coverage:</strong> All of Malaysia</div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div style="font-size:10px;color:{_t_sidebar['text4']};line-height:1.7;padding-top:6px;">
+        <strong style="color:{_t_sidebar['text3']};">Data Source:</strong> Sentinel-2 L2A<br>
+        <strong style="color:{_t_sidebar['text3']};">Revisit:</strong> 5-day cycle<br>
+        <strong style="color:{_t_sidebar['text3']};">Processing:</strong> Google Earth Engine<br>
+        <strong style="color:{_t_sidebar['text3']};">Coverage:</strong> All of Malaysia</div>""",
+        unsafe_allow_html=True)
 
 t = LIGHT if theme_choice == "Light" else DARK
 

@@ -397,7 +397,7 @@ def build_map(zones_df, value_col):
 # ALTAIR CHART
 # ──────────────────────────────────────────────────────────────
 
-def build_trend_chart(trends_df, value_col):
+def build_trend_chart(trends_df, value_col, warning_thresh=None, critical_thresh=None):
     long_df = trends_df.melt(id_vars="date", var_name="Zone", value_name=value_col.upper())
     long_df = long_df.dropna(subset=[value_col.upper()])
     color_scale = alt.Scale(range=[t['green'], t['amber'], t['red'], t['blue'], "#a78bfa", "#f472b6"])
@@ -428,9 +428,22 @@ def build_trend_chart(trends_df, value_col):
             alt.Tooltip(f"{value_col.upper()}:Q", title=value_col.upper(), format=".4f"),
         ]
     )
-    return (lines + points).properties(height=300, background="transparent") \
-                           .configure(font="Inter") \
-                           .configure_view(strokeWidth=0)
+    layers = [lines, points]
+    if warning_thresh is not None:
+        layers.append(
+            alt.Chart(pd.DataFrame({"y": [warning_thresh]})).mark_rule(
+                strokeDash=[4, 4], color=t["amber"], opacity=0.55
+            ).encode(y=alt.Y("y:Q"))
+        )
+    if critical_thresh is not None:
+        layers.append(
+            alt.Chart(pd.DataFrame({"y": [critical_thresh]})).mark_rule(
+                strokeDash=[4, 4], color=t["red"], opacity=0.55
+            ).encode(y=alt.Y("y:Q"))
+        )
+    return alt.layer(*layers).properties(height=300, background="transparent") \
+                             .configure(font="Inter") \
+                             .configure_view(strokeWidth=0)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -627,7 +640,9 @@ st.markdown("")
 st.markdown(f"""<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
     <span class="panel-label" style="margin:0;">TREND: {module_name} — Historical Readings</span>
     <span class="note-box">{threshold_note}</span></div>""", unsafe_allow_html=True)
-st.altair_chart(build_trend_chart(trends_df, value_col), use_container_width=True)
+_warn_thresh = 0.0  if value_col == "turbidity" else 0.4
+_crit_thresh = 0.05 if value_col == "turbidity" else 0.2
+st.altair_chart(build_trend_chart(trends_df, value_col, _warn_thresh, _crit_thresh), use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════
