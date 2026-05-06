@@ -211,7 +211,7 @@ def load_hydro_trends():
     pivot = df.pivot(index="date", columns="zone", values="ndti_mean")
     pivot = pivot.sort_index().reset_index()
     pivot.columns.name = None
-    pivot["date"] = pivot["date"].dt.strftime("%d %b %Y")
+    pivot["date"] = pivot["date"].dt.strftime("%Y-%m-%d")
     return pivot
 
 
@@ -226,7 +226,7 @@ def load_agri_trends():
     pivot = df.pivot(index="date", columns="zone", values="ndvi_mean")
     pivot = pivot.sort_index().reset_index()
     pivot.columns.name = None
-    pivot["date"] = pivot["date"].dt.strftime("%d %b %Y")
+    pivot["date"] = pivot["date"].dt.strftime("%Y-%m-%d")
     return pivot
 
 NDTI_VIS = {"min": -0.1, "max": 0.35,
@@ -400,7 +400,6 @@ def build_map(zones_df, value_col):
 def build_trend_chart(trends_df, value_col):
     long_df = trends_df.melt(id_vars="date", var_name="Zone", value_name=value_col.upper())
     long_df = long_df.dropna(subset=[value_col.upper()])
-    date_order  = trends_df["date"].tolist()
     color_scale = alt.Scale(range=[t['green'], t['amber'], t['red'], t['blue'], "#a78bfa", "#f472b6"])
     y_min    = long_df[value_col.upper()].min()
     y_max    = long_df[value_col.upper()].max()
@@ -408,8 +407,9 @@ def build_trend_chart(trends_df, value_col):
     y_domain = [round(y_min - y_pad, 2), round(y_max + y_pad, 2)]
 
     base = alt.Chart(long_df).encode(
-        x=alt.X("date:N", sort=date_order, title=None,
-            axis=alt.Axis(labelColor=t['text4'], labelFontSize=11, labelFont="Inter",
+        x=alt.X("date:T", title=None,
+            axis=alt.Axis(format="%b '%y", tickCount="month",
+                          labelColor=t['text4'], labelFontSize=11, labelFont="Inter",
                           tickColor="transparent", domainColor=t['border'],
                           labelAngle=0, labelPadding=10)),
         y=alt.Y(f"{value_col.upper()}:Q", scale=alt.Scale(domain=y_domain), title=None,

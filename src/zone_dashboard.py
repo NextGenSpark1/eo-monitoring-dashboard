@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
+import altair as alt
 from datetime import datetime
 import sys
 import os
@@ -126,29 +126,47 @@ def _fmt(val, decimals=4):
 
 
 def _render_kpis(hydro_df, agri_df, zone_type, t):
-    """Render KPI metric cards with delta from previous month."""
+    """Render KPI cards matching dashboard style."""
+
+    def _kpi_card(label, value, accent_color, tag_text=None, tag_class="tag-blue", delta=None, delta_inverse=False):
+        if delta is not None:
+            worse = delta > 0 if delta_inverse else delta < 0
+            delta_color = t["red"] if worse else t["green"]
+            arrow = "↑" if delta > 0 else "↓"
+            delta_html = f'<div style="font-size:11px;color:{delta_color};margin-top:2px;">{arrow} {abs(delta):.4f}</div>'
+        else:
+            delta_html = ""
+        tag_html = f'<span class="kpi-tag {tag_class}">{tag_text}</span>' if tag_text else ""
+        return (
+            f'<div class="kpi">'
+            f'<div class="kpi-accent" style="background:{accent_color};"></div>'
+            f'<div class="kpi-label">{label}</div>'
+            f'<div class="kpi-val">{value}</div>'
+            f'{delta_html}{tag_html}'
+            f'</div>'
+        )
 
     if zone_type in ["hydro", "both"] and not hydro_df.empty:
         latest = hydro_df.iloc[-1]
         prev   = hydro_df.iloc[-2] if len(hydro_df) > 1 else latest
 
-        alert_level = latest.get("alert_level", "normal")
-        alert_label = {"critical": "CRITICAL", "warning": "WARNING", "normal": "NORMAL"}.get(alert_level, "UNKNOWN")
-        alert_color = {"critical": t["red"], "warning": t["amber"], "normal": t["green"]}.get(alert_level, t["text4"])
+        alert  = latest.get("alert_level", "normal")
+        ndti   = latest.get("ndti_mean")
+        ndwi   = latest.get("ndwi_mean")
+        cloud  = latest.get("cloud_pct")
+        ndti_p = prev.get("ndti_mean")
+        ndti_ok  = ndti is not None and not pd.isna(ndti)
+        ndti_delta = round(ndti - ndti_p, 4) if (ndti_ok and ndti_p is not None and not pd.isna(ndti_p)) else None
 
-        c1, c2, c3, c4 = st.columns(4)
+        alert_color = {"critical": t["red"], "warning": t["amber"], "normal": t["green"]}.get(alert, t["text4"])
+        alert_tag   = {"critical": "tag-red", "warning": "tag-amber", "normal": "tag-green"}.get(alert, "tag-blue")
 
-        ndti_now   = latest.get("ndti_mean")
-        ndti_prev  = prev.get("ndti_mean")
-        ndti_ok    = ndti_now is not None and not pd.isna(ndti_now)
-        ndti_delta = round(ndti_now - ndti_prev, 4) if (ndti_ok and ndti_prev is not None and not pd.isna(ndti_prev)) else None
-
-        c1.metric("NDTI (Turbidity)", _fmt(ndti_now),
-                  delta=f"{ndti_delta:+.4f}" if ndti_delta is not None else None,
-                  delta_color="inverse")
-        c2.metric("NDWI (Water)",     _fmt(latest.get("ndwi_mean")))
-        c3.metric("Cloud Cover",      f"{latest.get('cloud_pct')}%" if latest.get("cloud_pct") else "N/A")
-        c4.metric("Alert Status",     alert_label)
+        st.markdown(f"""<div class="kpi-row">
+            {_kpi_card("NDTI (Turbidity)", _fmt(ndti), t["blue"], delta=ndti_delta, delta_inverse=True)}
+            {_kpi_card("NDWI (Water)",     _fmt(ndwi), t["blue"])}
+            {_kpi_card("Cloud Cover",      f"{cloud}%" if cloud else "N/A", t["text4"])}
+            {_kpi_card("Alert Status",     alert.upper(), alert_color, alert.capitalize(), alert_tag)}
+        </div>""", unsafe_allow_html=True)
 
         if latest.get("last_clear_view"):
             st.markdown(f'<div style="font-size:11px;color:{t["text4"]};margin-top:4px;">Last clear view: {latest["last_clear_view"]}</div>',
@@ -158,22 +176,23 @@ def _render_kpis(hydro_df, agri_df, zone_type, t):
         latest = agri_df.iloc[-1]
         prev   = agri_df.iloc[-2] if len(agri_df) > 1 else latest
 
-        alert_level = latest.get("alert_level", "normal")
-        alert_label = {"critical": "CRITICAL", "warning": "WARNING", "normal": "NORMAL"}.get(alert_level, "UNKNOWN")
+        alert  = latest.get("alert_level", "normal")
+        ndvi   = latest.get("ndvi_mean")
+        ndre   = latest.get("ndre_mean")
+        cloud  = latest.get("cloud_pct")
+        ndvi_p = prev.get("ndvi_mean")
+        ndvi_ok  = ndvi is not None and not pd.isna(ndvi)
+        ndvi_delta = round(ndvi - ndvi_p, 4) if (ndvi_ok and ndvi_p is not None and not pd.isna(ndvi_p)) else None
 
-        c1, c2, c3, c4 = st.columns(4)
+        alert_color = {"critical": t["red"], "warning": t["amber"], "normal": t["green"]}.get(alert, t["text4"])
+        alert_tag   = {"critical": "tag-red", "warning": "tag-amber", "normal": "tag-green"}.get(alert, "tag-blue")
 
-        ndvi_now   = latest.get("ndvi_mean")
-        ndvi_prev  = prev.get("ndvi_mean")
-        ndvi_ok    = ndvi_now is not None and not pd.isna(ndvi_now)
-        ndvi_delta = round(ndvi_now - ndvi_prev, 4) if (ndvi_ok and ndvi_prev is not None and not pd.isna(ndvi_prev)) else None
-
-        c1.metric("NDVI (Vegetation)", _fmt(ndvi_now),
-                  delta=f"{ndvi_delta:+.4f}" if ndvi_delta is not None else None,
-                  delta_color="normal")
-        c2.metric("NDRE (Chlorophyll)", _fmt(latest.get("ndre_mean")))
-        c3.metric("Cloud Cover",        f"{latest.get('cloud_pct')}%" if latest.get("cloud_pct") else "N/A")
-        c4.metric("Alert Status",       alert_label)
+        st.markdown(f"""<div class="kpi-row">
+            {_kpi_card("NDVI (Vegetation)", _fmt(ndvi), t["green"], delta=ndvi_delta, delta_inverse=False)}
+            {_kpi_card("NDRE (Chlorophyll)", _fmt(ndre), t["green"])}
+            {_kpi_card("Cloud Cover",        f"{cloud}%" if cloud else "N/A", t["text4"])}
+            {_kpi_card("Alert Status",       alert.upper(), alert_color, alert.capitalize(), alert_tag)}
+        </div>""", unsafe_allow_html=True)
 
 
 # ============================================================
@@ -181,120 +200,93 @@ def _render_kpis(hydro_df, agri_df, zone_type, t):
 # ============================================================
 
 def _render_trend_charts(hydro_df, agri_df, zone_type, zone_name, t):
-    """Render Plotly time series charts for NDTI and/or NDVI."""
+    """Render Altair trend charts matching main dashboard style."""
+
+    def _axis_x():
+        return alt.X("date:T", title=None,
+            axis=alt.Axis(format="%b '%y", tickCount="month",
+                          labelColor=t["text4"], labelFontSize=11, labelFont="Inter",
+                          tickColor="transparent", domainColor=t["border"],
+                          labelAngle=0, labelPadding=10))
+
+    def _axis_y():
+        return alt.Y("Value:Q", title=None,
+            axis=alt.Axis(labelColor=t["text4"], labelFontSize=10, labelFont="JetBrains Mono",
+                          gridColor=t["chart_grid"], tickColor="transparent", domainColor="transparent"))
+
+    def _threshold_rule(y_val, color):
+        return alt.Chart(pd.DataFrame({"y": [y_val]})).mark_rule(
+            strokeDash=[4, 4], color=color, opacity=0.55
+        ).encode(y=alt.Y("y:Q"))
+
+    def _trend_note(df, col, t):
+        valid = df[col].dropna()
+        if len(valid) < 3:
+            return
+        change = valid.tail(3).mean() - valid.head(3).mean()
+        if abs(change) < 0.02:
+            msg, bg, bdr = f"Stable (change: {change:+.4f})", t["blue_bg"], t["blue_bdr"]
+        elif (col == "ndti_mean" and change > 0) or (col != "ndti_mean" and change < 0):
+            msg, bg, bdr = f"Worsening ({change:+.4f})", t["red_bg"], t["red_bdr"]
+        else:
+            msg, bg, bdr = f"Improving ({change:+.4f})", t["green_bg"], t["green_bdr"]
+        st.markdown(f'<div style="font-size:11px;padding:6px 12px;background:{bg};border-left:3px solid {bdr};'
+                    f'border-radius:4px;color:{t["text3"]};margin-top:6px;">{msg}</div>',
+                    unsafe_allow_html=True)
 
     if zone_type in ["hydro", "both"] and not hydro_df.empty:
         df = hydro_df.copy()
         df["date"] = pd.to_datetime(df["date"])
-        df = df.sort_values("date")
+        df = df.sort_values("date").dropna(subset=["ndti_mean"])
+        df = df.rename(columns={"ndti_mean": "Value"})
 
-        fig = go.Figure()
+        base   = alt.Chart(df).encode(x=_axis_x(), y=_axis_y(),
+                     tooltip=[alt.Tooltip("date:T", title="Date", format="%d %b %Y"),
+                              alt.Tooltip("Value:Q", title="NDTI", format=".4f")])
+        line   = base.mark_line(strokeWidth=2.5, color=t["blue"], opacity=0.9)
+        points = base.mark_circle(size=50, color=t["blue"], opacity=1)
 
-        # NDTI line
-        fig.add_trace(go.Scatter(
-            x    = df["date"],
-            y    = df["ndti_mean"],
-            mode = "lines+markers",
-            name = "NDTI",
-            line = dict(color="#00B4D8", width=2),
-            marker = dict(size=6)
-        ))
-
-        # Threshold lines
-        fig.add_hline(
-            y=0.05, line_dash="dash", line_color="red",
-            annotation_text="🔴 Critical (0.05)",
-            annotation_position="bottom right"
-        )
-        fig.add_hline(
-            y=0.0, line_dash="dash", line_color="orange",
-            annotation_text="🟡 Warning (0.0)",
-            annotation_position="bottom right"
-        )
-
-        # Shade critical zone
-        fig.add_hrect(
-            y0=0.05, y1=df["ndti_mean"].max() + 0.02 if not df.empty else 0.2,
-            fillcolor="red", opacity=0.05, line_width=0
-        )
-
-        fig.update_layout(
-            title      = f"💧 Turbidity Trend — {zone_name}",
-            xaxis_title= "Date",
-            yaxis_title= "NDTI Value",
-            height     = 280,
-            margin     = dict(t=40, b=20, l=20, r=20),
-            showlegend = False
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Trend direction
-        if len(df) >= 3:
-            first3 = df.head(3)["ndti_mean"].mean()
-            last3  = df.tail(3)["ndti_mean"].mean()
-            change = last3 - first3
-            if change > 0.02:
-                st.error(f"📈 Turbidity increasing (+{change:.4f}) — dredging may be needed")
-            elif change < -0.02:
-                st.success(f"📉 Turbidity decreasing ({change:.4f}) — conditions improving")
-            else:
-                st.info(f"➡️ Turbidity stable (change: {change:.4f})")
+        chart = (line + points + _threshold_rule(0.05, t["red"]) + _threshold_rule(0.0, t["amber"])) \
+            .properties(height=260, background="transparent") \
+            .configure(font="Inter").configure_view(strokeWidth=0)
+        st.altair_chart(chart, use_container_width=True)
+        _trend_note(hydro_df, "ndti_mean", t)
 
     if zone_type in ["agri", "both"] and not agri_df.empty:
         df = agri_df.copy()
         df["date"] = pd.to_datetime(df["date"])
         df = df.sort_values("date")
 
-        fig = go.Figure()
-
-        fig.add_trace(go.Scatter(
-            x    = df["date"],
-            y    = df["ndvi_mean"],
-            mode = "lines+markers",
-            name = "NDVI",
-            line = dict(color="#38B000", width=2),
-            marker = dict(size=6)
-        ))
-
+        frames = []
+        if "ndvi_mean" in df.columns and df["ndvi_mean"].notna().any():
+            tmp = df[["date", "ndvi_mean"]].dropna().rename(columns={"ndvi_mean": "Value"})
+            tmp["Index"] = "NDVI"
+            frames.append(tmp)
         if "ndre_mean" in df.columns and df["ndre_mean"].notna().any():
-            fig.add_trace(go.Scatter(
-                x    = df["date"],
-                y    = df["ndre_mean"],
-                mode = "lines+markers",
-                name = "NDRE",
-                line = dict(color="#70E000", width=2, dash="dot"),
-                marker = dict(size=6)
-            ))
+            tmp = df[["date", "ndre_mean"]].dropna().rename(columns={"ndre_mean": "Value"})
+            tmp["Index"] = "NDRE"
+            frames.append(tmp)
 
-        fig.add_hline(
-            y=0.4, line_dash="dash", line_color="orange",
-            annotation_text="🟡 Warning (0.4)"
-        )
-        fig.add_hline(
-            y=0.2, line_dash="dash", line_color="red",
-            annotation_text="🔴 Critical (0.2)"
-        )
+        if frames:
+            long_df = pd.concat(frames)
+            color_scale = alt.Scale(domain=["NDVI", "NDRE"], range=[t["green"], "#70E000"])
+            base = alt.Chart(long_df).encode(
+                x=_axis_x(), y=_axis_y(),
+                color=alt.Color("Index:N", scale=color_scale,
+                    legend=alt.Legend(orient="bottom", labelColor=t["text3"],
+                                      labelFontSize=11, titleColor=t["text4"], symbolSize=60)),
+                tooltip=[alt.Tooltip("date:T", title="Date", format="%d %b %Y"),
+                         alt.Tooltip("Index:N", title="Index"),
+                         alt.Tooltip("Value:Q", title="Value", format=".4f")]
+            )
+            line   = base.mark_line(strokeWidth=2.5, opacity=0.9)
+            points = base.mark_circle(size=50, opacity=1)
 
-        fig.update_layout(
-            title      = f"🌴 Vegetation Trend — {zone_name}",
-            xaxis_title= "Date",
-            yaxis_title= "Index Value",
-            height     = 280,
-            margin     = dict(t=40, b=20, l=20, r=20),
-            showlegend = True
-        )
-        st.plotly_chart(fig, use_container_width=True)
-
-        if len(df) >= 3:
-            first3 = df.head(3)["ndvi_mean"].mean()
-            last3  = df.tail(3)["ndvi_mean"].mean()
-            change = last3 - first3
-            if change < -0.05:
-                st.error(f"📉 Vegetation declining ({change:.4f}) — investigate crop stress")
-            elif change > 0.05:
-                st.success(f"📈 Vegetation improving (+{change:.4f}) — healthy growth")
-            else:
-                st.info(f"➡️ Vegetation stable (change: {change:.4f})")
+            chart = (line + points + _threshold_rule(0.4, t["amber"]) + _threshold_rule(0.2, t["red"])) \
+                .properties(height=260, background="transparent") \
+                .configure(font="Inter").configure_view(strokeWidth=0)
+            st.altair_chart(chart, use_container_width=True)
+        _trend_note(agri_df, "ndvi_mean", t)
 
 
 # ============================================================
