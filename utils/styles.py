@@ -262,7 +262,8 @@ def get_css(t, theme_choice):
     }}
 
     /* ── Sidebar buttons ── */
-    section[data-testid="stSidebar"] .stButton > button {{
+    section[data-testid="stSidebar"] .stButton > button,
+    section[data-testid="stSidebar"] button[data-testid="baseButton-secondary"] {{
         border-radius: 8px !important;
         font-size: 12px !important;
         font-weight: 600 !important;
@@ -364,8 +365,10 @@ def get_css(t, theme_choice):
     .stSelectbox label p {{ color: {t['text3']} !important; font-size: 13px !important; }}
     .stSelectbox > div > div {{ cursor: pointer !important; }}
 
-    /* Buttons — all content areas */
-    .stButton > button {{
+    /* Buttons — all content areas (target both class and data-testid) */
+    .stButton > button,
+    button[data-testid="baseButton-secondary"],
+    [data-testid="stButton"] button {{
         background-color: {t['bg_card']} !important;
         border: 1px solid {t['border']} !important;
         border-radius: 8px !important;
@@ -375,12 +378,14 @@ def get_css(t, theme_choice):
         font-family: 'Inter', sans-serif !important;
         transition: all 0.2s !important;
     }}
-    .stButton > button:hover {{
+    .stButton > button:hover,
+    button[data-testid="baseButton-secondary"]:hover {{
         border-color: {t['blue']} !important;
         color: {t['blue']} !important;
         background-color: {t['blue_bg']} !important;
     }}
-    .stButton > button[kind="primary"] {{
+    .stButton > button[kind="primary"],
+    button[data-testid="baseButton-primary"] {{
         background-color: {t['blue']} !important;
         border-color: {t['blue']} !important;
         color: #ffffff !important;

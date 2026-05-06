@@ -35,8 +35,11 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
+    _saved = st.session_state.get("theme_choice", "Light")
     theme_choice = st.radio("Theme", ["Light", "Dark"], horizontal=True,
-                            label_visibility="collapsed", key="theme_choice")
+                            label_visibility="collapsed", key="ll_theme_choice",
+                            index=0 if _saved == "Light" else 1)
+    st.session_state["theme_choice"] = theme_choice
 
     _t_sidebar = LIGHT if theme_choice == "Light" else DARK
     st.markdown("---")
