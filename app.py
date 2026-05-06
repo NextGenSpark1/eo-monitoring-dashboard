@@ -84,8 +84,12 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
+    if "_theme" not in st.session_state:
+        st.session_state["_theme"] = "Light"
     theme_choice = st.radio("Theme", ["Light", "Dark"], horizontal=True,
-                            label_visibility="collapsed", key="theme_choice")
+                            label_visibility="collapsed",
+                            index=0 if st.session_state["_theme"] == "Light" else 1)
+    st.session_state["_theme"] = theme_choice
 
 t = LIGHT if theme_choice == "Light" else DARK
 
