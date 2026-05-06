@@ -348,6 +348,7 @@ def get_css(t, theme_choice):
     }}
     [role="option"]:hover {{ background-color: {t['blue_bg']} !important; }}
     .stSelectbox label p {{ color: {t['text3']} !important; font-size: 13px !important; }}
+    .stSelectbox > div > div {{ cursor: pointer !important; }}
 
     /* Buttons — main content */
     .stMainBlockContainer .stButton > button {{

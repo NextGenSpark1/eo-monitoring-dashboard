@@ -133,19 +133,24 @@ def compute_trend(sorted_values):
 
 
 @st.cache_data(ttl=300)
-def load_hydro_data():
-    """Latest hydro reading per zone (transformed for the dashboard cards)."""
+def load_hydro_data(extra_zones=()):
+    """Latest hydro reading per zone. extra_zones extends ZONE_COORDS with saved zones."""
     df = read_hydro_data()
     if df.empty:
         return pd.DataFrame()
 
+    all_coords = dict(ZONE_COORDS)
+    for z_name, z_lat, z_lon, z_id in extra_zones:
+        if z_name not in all_coords:
+            all_coords[z_name] = {"lat": z_lat, "lon": z_lon, "zone_id": z_id}
+
     df = df.sort_values("date")
     result = []
     for zone_name, group in df.groupby("zone"):
-        if zone_name not in ZONE_COORDS:
+        if zone_name not in all_coords:
             continue
         latest_row = group.iloc[-1]
-        coords = ZONE_COORDS[zone_name]
+        coords = all_coords[zone_name]
         result.append({
             "zone_id":   coords["zone_id"],
             "name":      zone_name,
@@ -162,19 +167,24 @@ def load_hydro_data():
 
 
 @st.cache_data(ttl=300)
-def load_agri_data():
-    """Latest agri reading per zone (transformed for the dashboard cards)."""
+def load_agri_data(extra_zones=()):
+    """Latest agri reading per zone. extra_zones extends ZONE_COORDS with saved zones."""
     df = read_agri_data()
     if df.empty:
         return pd.DataFrame()
 
+    all_coords = dict(ZONE_COORDS)
+    for z_name, z_lat, z_lon, z_id in extra_zones:
+        if z_name not in all_coords:
+            all_coords[z_name] = {"lat": z_lat, "lon": z_lon, "zone_id": z_id}
+
     df = df.sort_values("date")
     result = []
     for zone_name, group in df.groupby("zone"):
-        if zone_name not in ZONE_COORDS:
+        if zone_name not in all_coords:
             continue
         latest_row = group.iloc[-1]
-        coords = ZONE_COORDS[zone_name]
+        coords = all_coords[zone_name]
         result.append({
             "zone_id":  coords["zone_id"],
             "name":     zone_name,
@@ -388,7 +398,8 @@ def build_map(zones_df, value_col):
 # ──────────────────────────────────────────────────────────────
 
 def build_trend_chart(trends_df, value_col):
-    long_df     = trends_df.melt(id_vars="date", var_name="Zone", value_name=value_col.upper())
+    long_df = trends_df.melt(id_vars="date", var_name="Zone", value_name=value_col.upper())
+    long_df = long_df.dropna(subset=[value_col.upper()])
     date_order  = trends_df["date"].tolist()
     color_scale = alt.Scale(range=[t['green'], t['amber'], t['red'], t['blue'], "#a78bfa", "#f472b6"])
     y_domain    = [0, 0.85] if value_col == "ndvi" else [0, 0.8]
@@ -510,14 +521,26 @@ with st.sidebar:
 # LOAD & FILTER DATA
 # ══════════════════════════════════════════════════════════════
 
+# Build extra_zones tuple from saved_zones for cache-safe passing
+_hydro_extra = tuple(
+    (z["zone_name"], z["lat"], z["lon"], f"SAVED-{i}")
+    for i, z in enumerate(saved_zones)
+    if z.get("zone_type") in ("hydro", "both")
+)
+_agri_extra = tuple(
+    (z["zone_name"], z["lat"], z["lon"], f"SAVED-{i}")
+    for i, z in enumerate(saved_zones)
+    if z.get("zone_type") in ("agri", "both")
+)
+
 if view_choice == "Hydro Reservoir":
-    all_zones  = classify_hydro_status(load_hydro_data(), warning_threshold, critical_threshold)
+    all_zones  = classify_hydro_status(load_hydro_data(_hydro_extra), warning_threshold, critical_threshold)
     trends_df  = load_hydro_trends()
     value_col  = "turbidity"
     module_name = "Turbidity"
     threshold_note = "Higher = worse water quality"
 else:
-    all_zones  = classify_agri_status(load_agri_data(), warning_threshold, critical_threshold)
+    all_zones  = classify_agri_status(load_agri_data(_agri_extra), warning_threshold, critical_threshold)
     trends_df  = load_agri_trends()
     value_col  = "ndvi"
     module_name = "NDVI"
@@ -740,7 +763,8 @@ with details_col:
 
 st.markdown("")
 
-# Build full list: hardcoded zones + saved zones
+# Build zone list for current module only
+_module_type = "hydro" if view_choice == "Hydro Reservoir" else "agri"
 _all_monitored = [
     {"zone_name": RESERVOIR_CONFIG["name"], "lat": RESERVOIR_CONFIG["lat"],
      "lon": RESERVOIR_CONFIG["lon"], "zone_type": "hydro", "added_at": ""},
@@ -749,12 +773,14 @@ _all_monitored = [
 ] + [z for z in saved_zones if z["zone_name"] not in
      (RESERVOIR_CONFIG["name"], FARM_CONFIG["name"])]
 
-_zone_names = ["— select a zone to inspect —"] + [z["zone_name"] for z in _all_monitored]
-_selected   = st.selectbox("Inspect a zone", _zone_names,
-                           label_visibility="collapsed", key="zone_inspect_select")
+_module_zones = [z for z in _all_monitored
+                 if z["zone_type"] in (_module_type, "both")]
+_zone_names   = ["— select a zone to inspect —"] + [z["zone_name"] for z in _module_zones]
+_selected     = st.selectbox("Inspect a zone", _zone_names,
+                             label_visibility="collapsed", key="zone_inspect_select")
 
 if _selected and _selected != "— select a zone to inspect —":
-    _zone_dict = next((z for z in _all_monitored if z["zone_name"] == _selected), None)
+    _zone_dict = next((z for z in _module_zones if z["zone_name"] == _selected), None)
     if _zone_dict:
         with st.expander(f"Zone Detail — {_selected}", expanded=True):
             render_zone_dashboard(_zone_dict)
