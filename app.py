@@ -472,15 +472,15 @@ with st.sidebar:
     st.markdown("---")
     st.markdown(f'<p class="sb-label">Thresholds</p>', unsafe_allow_html=True)
     if view_choice == "Hydro Reservoir":
-        warning_threshold  = st.slider("Warning level (NDTI >=)", 0.0, 1.0, 0.40, 0.05, key="hydro_warn")
-        critical_threshold = st.slider("Critical level (NDTI >=)", 0.0, 1.0, 0.60, 0.05, key="hydro_crit")
+        warning_threshold  = st.slider("Warning level (NDTI >=)", 0.0, 1.0, 0.03, 0.01, key="hydro_warn")
+        critical_threshold = st.slider("Critical level (NDTI >=)", 0.0, 1.0, 0.09, 0.01, key="hydro_crit")
         st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
             <span style="color:{t['green']};">●</span> Normal: &lt; {warning_threshold:.2f}<br>
             <span style="color:{t['amber']};">●</span> Warning: {warning_threshold:.2f} – {critical_threshold:.2f}<br>
             <span style="color:{t['red']};">●</span> Critical: ≥ {critical_threshold:.2f}</div>""", unsafe_allow_html=True)
     else:
-        warning_threshold  = st.slider("Warning level (NDVI <)", 0.0, 1.0, 0.55, 0.05, key="agri_warn")
-        critical_threshold = st.slider("Critical level (NDVI <)", 0.0, 1.0, 0.40, 0.05, key="agri_crit")
+        warning_threshold  = st.slider("Warning level (NDVI <)", 0.0, 1.0, 0.40, 0.05, key="agri_warn")
+        critical_threshold = st.slider("Critical level (NDVI <)", 0.0, 1.0, 0.20, 0.05, key="agri_crit")
         st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
             <span style="color:{t['green']};">●</span> Normal: &gt; {warning_threshold:.2f}<br>
             <span style="color:{t['amber']};">●</span> Warning: {critical_threshold:.2f} – {warning_threshold:.2f}<br>
