@@ -530,19 +530,6 @@ with st.sidebar:
     st.markdown(f'<div style="font-size:10px;color:{t["text4"]};margin-top:8px;line-height:1.6;">Get your ID via <b style="color:{t["text3"]};">@userinfobot</b> on Telegram.</div>', unsafe_allow_html=True)
 
     st.markdown("---")
-    st.markdown(f'<p class="sb-label">Zone Inspection</p>', unsafe_allow_html=True)
-    _zi_type  = "hydro" if view_choice == "Hydro Reservoir" else "agri"
-    _zi_all   = [
-        {"zone_name": RESERVOIR_CONFIG["name"], "lat": RESERVOIR_CONFIG["lat"],
-         "lon": RESERVOIR_CONFIG["lon"], "zone_type": "hydro"},
-        {"zone_name": FARM_CONFIG["name"], "lat": FARM_CONFIG["lat"],
-         "lon": FARM_CONFIG["lon"], "zone_type": "agri"},
-    ] + [z for z in saved_zones if z["zone_name"] not in (RESERVOIR_CONFIG["name"], FARM_CONFIG["name"])]
-    _zi_zones = [z for z in _zi_all if z["zone_type"] in (_zi_type, "both")]
-    _zi_names = ["— select a zone —"] + [z["zone_name"] for z in _zi_zones]
-    st.selectbox("Inspect a zone", _zi_names, label_visibility="collapsed", key="zone_inspect_select")
-
-    st.markdown("---")
     st.markdown(f"""<div style="font-size:10px;color:{t['text4']};line-height:1.7;padding-top:6px;">
         <strong style="color:{t['text3']};">Data Source:</strong> Sentinel-2 L2A<br>
         <strong style="color:{t['text3']};">Revisit:</strong> 5-day cycle<br>
@@ -787,27 +774,6 @@ with details_col:
                 <div><div class="zname"><span class="dot {zone_style['dot']}"></span>{zone_row['name']}</div><div class="zmeta">{detail_label}</div></div>
                 <div style="text-align:right;"><div class="zval {zone_style['color']}">{zone_value}</div><div style="font-size:10px;color:{t['text4']};">{trend_arrow} {zone_row['trend']}</div></div></div></div>""", unsafe_allow_html=True)
 
-
-# ══════════════════════════════════════════════════════════════
-# ZONE INSPECTION — detail panel driven by sidebar selectbox
-# ══════════════════════════════════════════════════════════════
-
-_selected = st.session_state.get("zone_inspect_select", "— select a zone —")
-if _selected and _selected != "— select a zone —":
-    _module_type = "hydro" if view_choice == "Hydro Reservoir" else "agri"
-    _all_monitored = [
-        {"zone_name": RESERVOIR_CONFIG["name"], "lat": RESERVOIR_CONFIG["lat"],
-         "lon": RESERVOIR_CONFIG["lon"], "zone_type": "hydro", "added_at": ""},
-        {"zone_name": FARM_CONFIG["name"], "lat": FARM_CONFIG["lat"],
-         "lon": FARM_CONFIG["lon"], "zone_type": "agri", "added_at": ""},
-    ] + [z for z in saved_zones if z["zone_name"] not in
-         (RESERVOIR_CONFIG["name"], FARM_CONFIG["name"])]
-    _module_zones = [z for z in _all_monitored if z["zone_type"] in (_module_type, "both")]
-    _zone_dict = next((z for z in _module_zones if z["zone_name"] == _selected), None)
-    if _zone_dict:
-        st.markdown("")
-        with st.expander(f"Zone Detail — {_selected}", expanded=True):
-            render_zone_dashboard(_zone_dict, t)
 
 # ══════════════════════════════════════════════════════════════
 # ALERTS PANEL
