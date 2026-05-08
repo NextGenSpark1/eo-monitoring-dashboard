@@ -129,73 +129,73 @@ def _latest_agri():
 hydro_latest = _latest_hydro()
 agri_latest  = _latest_agri()
 
-# ── Zone card renderer ───────────────────────────────────────
-def _zone_card(zone: dict, index_key: str, index_label: str, latest_lookup: dict):
-    name    = zone["zone_name"]
-    reading = latest_lookup.get(name, {})
-    value   = reading.get(index_key)
-    alert   = reading.get("alert_level", "normal")
-    date    = reading.get("date", "")
-
-    dot_color  = {"critical": t["red"], "warning": t["amber"], "normal": t["green"]}.get(alert, t["green"])
-    val_color  = {"critical": "c-r",    "warning": "c-y",      "normal": "c-g"}.get(alert, "c-g")
-    dot_class  = {"critical": "dot-r",  "warning": "dot-y",    "normal": "dot-g"}.get(alert, "dot-g")
-    card_class = {"critical": "zcard-crit", "warning": "zcard-warn", "normal": ""}.get(alert, "")
-
-    val_display = f"{value:.4f}" if value is not None else "—"
-    date_display = f"Last reading: {date}" if date else "No data yet"
-
-    st.markdown(f"""<div class="zcard {card_class}" style="margin-bottom:10px;">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-            <div>
-                <div class="zname"><span class="dot {dot_class}"></span>{name}</div>
-                <div class="zmeta">{date_display}</div>
-            </div>
-            <div style="text-align:right;">
-                <div class="zval {val_color}">{val_display}</div>
-                <div style="font-size:10px;color:{t['text4']};">{index_label}</div>
-            </div>
-        </div>
-    </div>""", unsafe_allow_html=True)
-
-    if st.button("Inspect", key=f"zi_btn_{name}", use_container_width=True):
-        st.session_state["zi_selected"] = name
-        st.rerun()
+# ── Status summary row for a zone list ──────────────────────
+def _status_summary(zones, latest_lookup, index_key):
+    counts = {"normal": 0, "warning": 0, "critical": 0}
+    for z in zones:
+        alert = latest_lookup.get(z["zone_name"], {}).get("alert_level", "normal")
+        counts[alert] = counts.get(alert, 0) + 1
+    parts = []
+    if counts["critical"]: parts.append(f'<span style="color:{t["red"]};font-weight:600;">{counts["critical"]} critical</span>')
+    if counts["warning"]:  parts.append(f'<span style="color:{t["amber"]};font-weight:600;">{counts["warning"]} warning</span>')
+    if counts["normal"]:   parts.append(f'<span style="color:{t["green"]};">{counts["normal"]} normal</span>')
+    return " · ".join(parts) if parts else ""
 
 
-# ── Zone Lists ───────────────────────────────────────────────
+# ── Zone Selectors ───────────────────────────────────────────
 hydro_col, agri_col = st.columns(2)
 
 with hydro_col:
-    st.markdown(f"""<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
-        <span class="panel-label" style="margin:0;">HYDRO ZONES</span>
-        <span class="meta-tag">{len(hydro_zones)} monitored</span>
+    _h_summary = _status_summary(hydro_zones, hydro_latest, "ndti_mean")
+    st.markdown(f"""<div style="margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+            <span class="panel-label" style="margin:0;">HYDRO ZONES</span>
+            <span class="meta-tag">{len(hydro_zones)} monitored</span>
+        </div>
+        <div style="font-size:11px;margin-bottom:10px;">{_h_summary}</div>
     </div>""", unsafe_allow_html=True)
 
-    for zone in hydro_zones:
-        _zone_card(zone, "ndti_mean", "NDTI", hydro_latest)
+    _hydro_names = ["— select a zone —"] + [z["zone_name"] for z in hydro_zones]
+    _hydro_sel   = st.selectbox("Hydro zone", _hydro_names,
+                                label_visibility="collapsed", key="zi_hydro")
 
 with agri_col:
-    st.markdown(f"""<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
-        <span class="panel-label" style="margin:0;">AGRI ZONES</span>
-        <span class="meta-tag">{len(agri_zones)} monitored</span>
+    _a_summary = _status_summary(agri_zones, agri_latest, "ndvi_mean")
+    st.markdown(f"""<div style="margin-bottom:8px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+            <span class="panel-label" style="margin:0;">AGRI ZONES</span>
+            <span class="meta-tag">{len(agri_zones)} monitored</span>
+        </div>
+        <div style="font-size:11px;margin-bottom:10px;">{_a_summary}</div>
     </div>""", unsafe_allow_html=True)
 
-    for zone in agri_zones:
-        _zone_card(zone, "ndvi_mean", "NDVI", agri_latest)
+    _agri_names = ["— select a zone —"] + [z["zone_name"] for z in agri_zones]
+    _agri_sel   = st.selectbox("Agri zone", _agri_names,
+                               label_visibility="collapsed", key="zi_agri")
+
+# If both are selected, whichever changed last wins — track via session state
+if _hydro_sel != "— select a zone —":
+    if st.session_state.get("_zi_last") != _hydro_sel:
+        st.session_state["_zi_last"]    = _hydro_sel
+        st.session_state["zi_selected"] = _hydro_sel
+
+if _agri_sel != "— select a zone —":
+    if st.session_state.get("_zi_last") != _agri_sel:
+        st.session_state["_zi_last"]    = _agri_sel
+        st.session_state["zi_selected"] = _agri_sel
 
 
 # ── Zone Detail ──────────────────────────────────────────────
 _selected = st.session_state.get("zi_selected")
-if _selected:
+if _selected and _selected not in ("— select a zone —",):
     all_zones  = hydro_zones + agri_zones
     _zone_dict = next((z for z in all_zones if z["zone_name"] == _selected), None)
     if _zone_dict:
         st.markdown("---")
-        st.markdown(f"""<div style="margin-bottom:12px;">
-            <span class="panel-label">ZONE DETAIL — {_selected}</span>
-        </div>""", unsafe_allow_html=True)
-        with st.expander(f"{_selected}", expanded=True):
+        st.markdown(f'<span class="panel-label">ZONE DETAIL — {_selected}</span>',
+                    unsafe_allow_html=True)
+        st.markdown("")
+        with st.expander(_selected, expanded=True):
             render_zone_dashboard(_zone_dict, t)
 
 # ── Footer ────────────────────────────────────────────────────
