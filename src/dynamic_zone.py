@@ -391,6 +391,14 @@ def render_search_ui():
             format_func = lambda x: {"hydro": "Hydro", "agri": "Agri", "both": "Both"}[x]
         )
 
+    with st.expander("Advanced options"):
+        radius_km = st.slider(
+            "Monitoring radius (km)",
+            min_value=1, max_value=10, value=2, step=1,
+            help="Area around the coordinate to include in the satellite analysis. Wider = broader coverage but slower."
+        )
+        buffer_m = radius_km * 1000
+
     analyse_clicked = st.button("Analyse Location", type="primary", use_container_width=True)
 
     if analyse_clicked and search_input:
@@ -409,7 +417,7 @@ def render_search_ui():
             quick_result = analyse_location(
                 lat=location["lat"], lon=location["lon"],
                 zone_name=location["name"], zone_type=zone_type,
-                months=3, buffer_m=2000
+                months=3, buffer_m=buffer_m
             )
 
         if not quick_result["success"]:
@@ -449,7 +457,7 @@ def render_search_ui():
             with st.spinner("Loading full 12-month history..."):
                 full_result = analyse_location(
                     lat=lat, lon=lon, zone_name=location["name"],
-                    zone_type=zone_type, months=12, buffer_m=2000
+                    zone_type=zone_type, months=12, buffer_m=buffer_m
                 )
             if full_result["success"]:
                 st.session_state["lookup_full"] = full_result
