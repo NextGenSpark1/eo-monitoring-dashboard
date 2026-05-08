@@ -420,7 +420,7 @@ def build_trend_chart(trends_df, value_col, warning_thresh=None, critical_thresh
             axis=alt.Axis(labelColor=t['text4'], labelFontSize=10, labelFont="JetBrains Mono",
                           gridColor=t['chart_grid'], tickColor="transparent", domainColor="transparent")),
         color=alt.Color("Zone:N", scale=color_scale, title="Zone",
-            legend=alt.Legend(orient="bottom", columns=3, labelColor=t['text3'],
+            legend=alt.Legend(orient="bottom", columns=10, labelColor=t['text3'],
                               labelFontSize=11, labelFont="Inter", titleColor=t['text4'],
                               titleFontSize=10, symbolSize=60)),
     )
