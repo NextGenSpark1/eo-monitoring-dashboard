@@ -449,6 +449,8 @@ def render_search_ui():
     _render_trend_chart(quick_result, label="Recent 3-Month Trend")
     _render_live_map(lat, lon, zone_type, zone_name=location["name"])
 
+    _render_save_button(quick_result)
+
     st.markdown('<hr style="margin:24px 0;border-color:rgba(0,0,0,0.07);">', unsafe_allow_html=True)
     st.markdown('<div class="panel-label" style="margin-bottom:14px;">FULL 12-MONTH HISTORY</div>', unsafe_allow_html=True)
 
@@ -464,14 +466,11 @@ def render_search_ui():
                 st.rerun()
             else:
                 st.markdown(f'<div class="alrt alrt-crit"><div class="alrt-zone">Failed</div><div class="alrt-msg">{full_result["error"]}</div></div>', unsafe_allow_html=True)
-        _render_save_button(quick_result)
     else:
         full_result = st.session_state["lookup_full"]
         _render_trend_chart(full_result, label="Full 12-Month Trend")
         _render_data_table(full_result)
         _render_trend_summary(full_result)
-        st.markdown('<hr style="margin:16px 0;border-color:rgba(0,0,0,0.07);">', unsafe_allow_html=True)
-        _render_save_button(full_result)
  
  
 # ============================================================
@@ -587,7 +586,7 @@ def _render_live_map(lat: float, lon: float, zone_type: str, zone_name: str = ""
         map_result = get_live_map(lat, lon, zone_type, zone_name=zone_name)
 
     if map_result["success"]:
-        st_folium(map_result["map"], height=420, use_container_width=True)
+        st_folium(map_result["map"], height=520, use_container_width=True)
         st.markdown("""
         <div style="display:flex;gap:20px;margin-top:10px;">
             <div style="flex:1;">

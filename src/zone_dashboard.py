@@ -161,11 +161,12 @@ def _render_kpis(hydro_df, agri_df, zone_type, t):
         alert_color = {"critical": t["red"], "warning": t["amber"], "normal": t["green"]}.get(alert, t["text4"])
         alert_tag   = {"critical": "tag-red", "warning": "tag-amber", "normal": "tag-green"}.get(alert, "tag-blue")
 
+        _cloud_html = _kpi_card("Cloud Cover", f"{cloud}%", t["text4"]) if cloud else ""
         st.markdown(f"""<div class="kpi-row">
             {_kpi_card("NDTI (Turbidity)", _fmt(ndti), t["blue"], delta=ndti_delta, delta_inverse=True)}
-            {_kpi_card("NDWI (Water)",     _fmt(ndwi), t["blue"])}
-            {_kpi_card("Cloud Cover",      f"{cloud}%" if cloud else "N/A", t["text4"])}
-            {_kpi_card("Alert Status",     alert.upper(), alert_color, alert.capitalize(), alert_tag)}
+            {_kpi_card("NDWI (Water)", _fmt(ndwi) if (ndwi is not None and not pd.isna(ndwi) and ndwi != 0.0) else "—", t["blue"])}
+            {_cloud_html}
+            {_kpi_card("Alert Status", alert.upper(), alert_color, alert.capitalize(), alert_tag)}
         </div>""", unsafe_allow_html=True)
 
         if latest.get("last_clear_view"):

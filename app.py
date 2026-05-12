@@ -460,74 +460,75 @@ with st.sidebar:
     view_choice = st.radio("Module", ["Hydro Reservoir", "Agriculture"], label_visibility="collapsed")
 
     st.markdown("---")
-    st.markdown(f'<p class="sb-label">Status Filter</p>', unsafe_allow_html=True)
-    show_normal   = st.checkbox("Normal",   value=True)
-    show_warning  = st.checkbox("Warning",  value=True)
-    show_critical = st.checkbox("Critical", value=True)
-    active_statuses = []
-    if show_normal:   active_statuses.append("normal")
-    if show_warning:  active_statuses.append("warning")
-    if show_critical: active_statuses.append("critical")
-
-    st.markdown("---")
-    st.markdown(f'<p class="sb-label">Thresholds</p>', unsafe_allow_html=True)
-    if view_choice == "Hydro Reservoir":
-        warning_threshold  = st.slider("Warning level (NDTI >=)", 0.0, 1.0, 0.03, 0.01, key="hydro_warn")
-        critical_threshold = st.slider("Critical level (NDTI >=)", 0.0, 1.0, 0.09, 0.01, key="hydro_crit")
-        st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
-            <span style="color:{t['green']};">●</span> Normal: &lt; {warning_threshold:.2f}<br>
-            <span style="color:{t['amber']};">●</span> Warning: {warning_threshold:.2f} – {critical_threshold:.2f}<br>
-            <span style="color:{t['red']};">●</span> Critical: ≥ {critical_threshold:.2f}</div>""", unsafe_allow_html=True)
-    else:
-        warning_threshold  = st.slider("Warning level (NDVI <)", 0.0, 1.0, 0.40, 0.05, key="agri_warn")
-        critical_threshold = st.slider("Critical level (NDVI <)", 0.0, 1.0, 0.20, 0.05, key="agri_crit")
-        st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
-            <span style="color:{t['green']};">●</span> Normal: &gt; {warning_threshold:.2f}<br>
-            <span style="color:{t['amber']};">●</span> Warning: {critical_threshold:.2f} – {warning_threshold:.2f}<br>
-            <span style="color:{t['red']};">●</span> Critical: &lt; {critical_threshold:.2f}</div>""", unsafe_allow_html=True)
-
-    st.markdown("---")
     st.markdown(f'<p class="sb-label">Alert Subscription</p>', unsafe_allow_html=True)
-    st.markdown(f'<p style="font-size:11px;color:{t["text4"]};margin:0 0 10px;">Paste your Telegram chat ID to receive alerts.</p>', unsafe_allow_html=True)
-    chat_id_input = st.text_input(
-        "Telegram Chat ID",
-        placeholder="e.g. 1761625405",
-        label_visibility="collapsed",
-        key="chat_id_input"
-    )
-    subscribe_col, test_col = st.columns(2)
-    with subscribe_col:
-        subscribe_clicked = st.button("Subscribe", use_container_width=True, key="btn_subscribe", type="primary")
-    with test_col:
-        test_clicked = st.button("Test Alert", use_container_width=True, key="btn_test")
+    with st.expander("Subscribe to Telegram Alerts", expanded=False):
+        st.markdown(f'<p style="font-size:11px;color:{t["text4"]};margin:0 0 10px;">Paste your Telegram chat ID to receive alerts.</p>', unsafe_allow_html=True)
+        chat_id_input = st.text_input(
+            "Telegram Chat ID",
+            placeholder="e.g. 1761625405",
+            label_visibility="collapsed",
+            key="chat_id_input"
+        )
+        subscribe_col, test_col = st.columns(2)
+        with subscribe_col:
+            subscribe_clicked = st.button("Subscribe", use_container_width=True, key="btn_subscribe", type="primary")
+        with test_col:
+            test_clicked = st.button("Test Alert", use_container_width=True, key="btn_test")
 
-    if subscribe_clicked:
-        if chat_id_input.strip():
-            chat_id = chat_id_input.strip()
-            saved = add_subscriber(chat_id)
-            if saved:
-                ok, error_msg = send_subscription_welcome(chat_id)
+        if subscribe_clicked:
+            if chat_id_input.strip():
+                chat_id = chat_id_input.strip()
+                saved = add_subscriber(chat_id)
+                if saved:
+                    ok, error_msg = send_subscription_welcome(chat_id)
+                    st.markdown(
+                        f'<div class="sb-feedback {"sb-ok" if ok else "sb-err"}">'
+                        f'{"Subscribed successfully." if ok else f"Failed: {error_msg}"}</div>',
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown('<div class="sb-feedback sb-err">Could not save subscriber. Check Supabase connection.</div>', unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="sb-feedback sb-warn">Enter a chat ID first.</div>', unsafe_allow_html=True)
+
+        if test_clicked:
+            if chat_id_input.strip():
+                ok, error_msg = send_test_alert(chat_id_input.strip())
                 st.markdown(
                     f'<div class="sb-feedback {"sb-ok" if ok else "sb-err"}">'
-                    f'{"Subscribed successfully." if ok else f"Failed: {error_msg}"}</div>',
+                    f'{"Test alert sent to Telegram." if ok else f"Failed: {error_msg}"}</div>',
                     unsafe_allow_html=True,
                 )
             else:
-                st.markdown('<div class="sb-feedback sb-err">Could not save subscriber. Check Supabase connection.</div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="sb-feedback sb-warn">Enter a chat ID first.</div>', unsafe_allow_html=True)
+                st.markdown('<div class="sb-feedback sb-warn">Enter a chat ID first.</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font-size:10px;color:{t["text4"]};margin-top:8px;line-height:1.6;">Get your ID via <b style="color:{t["text3"]};">@userinfobot</b> on Telegram.</div>', unsafe_allow_html=True)
 
-    if test_clicked:
-        if chat_id_input.strip():
-            ok, error_msg = send_test_alert(chat_id_input.strip())
-            st.markdown(
-                f'<div class="sb-feedback {"sb-ok" if ok else "sb-err"}">'
-                f'{"Test alert sent to Telegram." if ok else f"Failed: {error_msg}"}</div>',
-                unsafe_allow_html=True,
-            )
+    st.markdown("---")
+    with st.expander("Filters & Thresholds", expanded=True):
+        st.markdown(f'<p class="sb-label" style="margin:4px 0 8px;">Status Filter</p>', unsafe_allow_html=True)
+        show_normal   = st.checkbox("Normal",   value=True)
+        show_warning  = st.checkbox("Warning",  value=True)
+        show_critical = st.checkbox("Critical", value=True)
+        active_statuses = []
+        if show_normal:   active_statuses.append("normal")
+        if show_warning:  active_statuses.append("warning")
+        if show_critical: active_statuses.append("critical")
+
+        st.markdown(f'<p class="sb-label" style="margin:14px 0 8px;">Thresholds</p>', unsafe_allow_html=True)
+        if view_choice == "Hydro Reservoir":
+            warning_threshold  = st.slider("Warning level (NDTI >=)", 0.0, 1.0, 0.03, 0.01, key="hydro_warn")
+            critical_threshold = st.slider("Critical level (NDTI >=)", 0.0, 1.0, 0.09, 0.01, key="hydro_crit")
+            st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
+                <span style="color:{t['green']};">●</span> Normal: &lt; {warning_threshold:.2f}<br>
+                <span style="color:{t['amber']};">●</span> Warning: {warning_threshold:.2f} – {critical_threshold:.2f}<br>
+                <span style="color:{t['red']};">●</span> Critical: ≥ {critical_threshold:.2f}</div>""", unsafe_allow_html=True)
         else:
-            st.markdown('<div class="sb-feedback sb-warn">Enter a chat ID first.</div>', unsafe_allow_html=True)
-    st.markdown(f'<div style="font-size:10px;color:{t["text4"]};margin-top:8px;line-height:1.6;">Get your ID via <b style="color:{t["text3"]};">@userinfobot</b> on Telegram.</div>', unsafe_allow_html=True)
+            warning_threshold  = st.slider("Warning level (NDVI <)", 0.0, 1.0, 0.40, 0.05, key="agri_warn")
+            critical_threshold = st.slider("Critical level (NDVI <)", 0.0, 1.0, 0.20, 0.05, key="agri_crit")
+            st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
+                <span style="color:{t['green']};">●</span> Normal: &gt; {warning_threshold:.2f}<br>
+                <span style="color:{t['amber']};">●</span> Warning: {critical_threshold:.2f} – {warning_threshold:.2f}<br>
+                <span style="color:{t['red']};">●</span> Critical: &lt; {critical_threshold:.2f}</div>""", unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown(f"""<div style="font-size:10px;color:{t['text4']};line-height:1.7;padding-top:6px;">
@@ -623,10 +624,22 @@ kpi_index_label = "NDTI Index" if value_col == "turbidity" else "Vegetation Inde
 critical_badge  = '<span class="kpi-tag tag-red">Immediate attention</span>'  if num_critical > 0 else '<span class="kpi-tag tag-green">All clear</span>'
 warning_badge   = '<span class="kpi-tag tag-amber">Under observation</span>' if num_warning  > 0 else '<span class="kpi-tag tag-green">All clear</span>'
 
+if value_col == "turbidity":
+    if avg_value < 0:              _quality_label = "Clear"
+    elif avg_value < warning_threshold:  _quality_label = "Low Turbidity"
+    elif avg_value < critical_threshold: _quality_label = "Elevated"
+    else:                                _quality_label = "High Turbidity"
+else:
+    if avg_value >= warning_threshold:   _quality_label = "Healthy"
+    elif avg_value >= critical_threshold: _quality_label = "Stressed"
+    else:                                _quality_label = "Severe Stress"
+
 st.markdown(f"""
 <div class="kpi-row">
     <div class="kpi"><div class="kpi-accent" style="background:linear-gradient(90deg,{t['blue']},{t['green']});"></div>
-        <div class="kpi-label">Avg {module_name}</div><div class="kpi-val">{avg_value}</div><span class="kpi-tag tag-blue">{kpi_index_label}</span></div>
+        <div class="kpi-label">Avg {module_name}</div><div class="kpi-val">{avg_value}</div>
+        <div style="font-size:11px;color:{t['text3']};margin:2px 0 4px;font-weight:500;">{_quality_label}</div>
+        <span class="kpi-tag tag-blue">{kpi_index_label}</span></div>
     <div class="kpi {'kpi-glow' if num_critical>0 else ''}"><div class="kpi-accent" style="background:{t['red']};"></div>
         <div class="kpi-label">Critical Zones</div><div class="kpi-val">{num_critical}</div>{critical_badge}</div>
     <div class="kpi"><div class="kpi-accent" style="background:{t['amber']};"></div>
@@ -721,23 +734,23 @@ with map_col:
 
     st_folium(geo_map, height=520, use_container_width=True)
     st.markdown(f"""
-    <div style="display:flex;gap:20px;margin-top:12px;">
+    <div style="display:flex;gap:24px;margin-top:14px;">
         <div style="flex:1;">
+            <div style="font-size:10px;font-weight:600;color:{t['text3']};letter-spacing:0.05em;margin-bottom:5px;">TURBIDITY INDEX (NDTI)</div>
             <div style="background:linear-gradient(to right,#1a237e,#0288d1,#4dd0e1,#fff176,#ff8f00,#b71c1c);
-                height:10px;border-radius:6px;"></div>
-            <div style="display:flex;justify-content:space-between;margin-top:4px;">
-                <span style="font-size:10px;color:{t['text4']};">Clean water (NDTI −0.10)</span>
-                <span style="font-size:10px;color:{t['text4']};font-weight:600;">Turbidity Index</span>
-                <span style="font-size:10px;color:{t['text4']};">Turbid (0.35)</span>
+                height:16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.12);"></div>
+            <div style="display:flex;justify-content:space-between;margin-top:5px;">
+                <span style="font-size:10px;color:{t['text4']};">−0.10 · Clean</span>
+                <span style="font-size:10px;color:{t['text4']};">0.35 · Turbid</span>
             </div>
         </div>
         <div style="flex:1;">
+            <div style="font-size:10px;font-weight:600;color:{t['text3']};letter-spacing:0.05em;margin-bottom:5px;">VEGETATION INDEX (NDVI)</div>
             <div style="background:linear-gradient(to right,#a50026,#f46d43,#fee08b,#d9ef8b,#66bd63,#1a9850,#006837);
-                height:10px;border-radius:6px;"></div>
-            <div style="display:flex;justify-content:space-between;margin-top:4px;">
-                <span style="font-size:10px;color:{t['text4']};">Stressed (NDVI 0.10)</span>
-                <span style="font-size:10px;color:{t['text4']};font-weight:600;">Vegetation Index</span>
-                <span style="font-size:10px;color:{t['text4']};">Healthy (0.85)</span>
+                height:16px;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,0.12);"></div>
+            <div style="display:flex;justify-content:space-between;margin-top:5px;">
+                <span style="font-size:10px;color:{t['text4']};">0.10 · Stressed</span>
+                <span style="font-size:10px;color:{t['text4']};">0.85 · Healthy</span>
             </div>
         </div>
     </div>""", unsafe_allow_html=True)
