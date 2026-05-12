@@ -460,7 +460,6 @@ with st.sidebar:
     view_choice = st.radio("Module", ["Hydro Reservoir", "Agriculture"], label_visibility="collapsed")
 
     st.markdown("---")
-    st.markdown(f'<p class="sb-label">Alert Subscription</p>', unsafe_allow_html=True)
     with st.expander("Subscribe to Telegram Alerts", expanded=False):
         st.markdown(f'<p style="font-size:11px;color:{t["text4"]};margin:0 0 10px;">Paste your Telegram chat ID to receive alerts.</p>', unsafe_allow_html=True)
         chat_id_input = st.text_input(
@@ -503,8 +502,7 @@ with st.sidebar:
                 st.markdown('<div class="sb-feedback sb-warn">Enter a chat ID first.</div>', unsafe_allow_html=True)
         st.markdown(f'<div style="font-size:10px;color:{t["text4"]};margin-top:8px;line-height:1.6;">Get your ID via <b style="color:{t["text3"]};">@userinfobot</b> on Telegram.</div>', unsafe_allow_html=True)
 
-    st.markdown("---")
-    with st.expander("Status Filter", expanded=True):
+    with st.expander("Status Filter", expanded=False):
         show_normal   = st.checkbox("Normal",   value=True)
         show_warning  = st.checkbox("Warning",  value=True)
         show_critical = st.checkbox("Critical", value=True)
@@ -513,7 +511,7 @@ with st.sidebar:
         if show_warning:  active_statuses.append("warning")
         if show_critical: active_statuses.append("critical")
 
-    with st.expander("Thresholds", expanded=True):
+    with st.expander("Thresholds", expanded=False):
         if view_choice == "Hydro Reservoir":
             warning_threshold  = st.slider("Warning level (NDTI >=)", 0.0, 1.0, 0.03, 0.01, key="hydro_warn")
             critical_threshold = st.slider("Critical level (NDTI >=)", 0.0, 1.0, 0.09, 0.01, key="hydro_crit")

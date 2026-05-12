@@ -120,23 +120,47 @@ def get_css(t, theme_choice):
     /* ── Sidebar expanders ── */
     section[data-testid="stSidebar"] [data-testid="stExpander"] {{
         border: 1px solid {t['border']} !important;
-        border-radius: 10px !important;
+        border-left: 3px solid {t['blue']} !important;
+        border-radius: 8px !important;
         background: {t['bg_card']} !important;
-        margin-bottom: 6px !important;
-        overflow: hidden;
+        margin-bottom: 8px !important;
+        margin-top: 0 !important;
+        overflow: hidden !important;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+        transition: box-shadow 0.2s ease, border-left-color 0.2s ease;
+    }}
+    section[data-testid="stSidebar"] [data-testid="stExpander"]:hover {{
+        box-shadow: 0 3px 10px rgba(37,99,235,0.12) !important;
+        border-left-color: {t['blue']} !important;
     }}
     section[data-testid="stSidebar"] [data-testid="stExpander"] summary {{
-        padding: 10px 14px !important;
-        font-size: 12.5px !important;
-        font-weight: 600 !important;
+        padding: 11px 14px !important;
+        font-size: 10.5px !important;
+        font-weight: 700 !important;
         color: {t['text2']} !important;
-        letter-spacing: 0.01em;
+        letter-spacing: 0.07em !important;
+        text-transform: uppercase !important;
+        background: transparent !important;
+        border-radius: 0 !important;
     }}
     section[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover {{
-        background: {t['border']} !important;
+        background: rgba(37,99,235,0.05) !important;
+    }}
+    section[data-testid="stSidebar"] [data-testid="stExpander"] summary p {{
+        font-size: 10.5px !important;
+        font-weight: 700 !important;
+        color: {t['text2']} !important;
+        letter-spacing: 0.07em !important;
+        text-transform: uppercase !important;
+    }}
+    section[data-testid="stSidebar"] [data-testid="stExpander"] summary svg {{
+        color: {t['blue']} !important;
+        width: 14px !important;
+        height: 14px !important;
     }}
     section[data-testid="stSidebar"] [data-testid="stExpander"] > div:last-child {{
-        padding: 4px 14px 12px !important;
+        padding: 6px 14px 14px !important;
+        border-top: 1px solid {t['border']} !important;
     }}
 
     /* ── Dashboard header ── */
