@@ -119,9 +119,9 @@ def render_zone_dashboard(zone: dict, t: dict = None):
 # ============================================================
 
 def _fmt(val, decimals=4):
-    """Format a numeric value safely — returns 'N/A' for None or NaN."""
+    """Format a numeric value safely — returns '—' for None or NaN."""
     if val is None or (isinstance(val, float) and pd.isna(val)):
-        return "N/A"
+        return "—"
     return f"{val:.{decimals}f}"
 
 
@@ -161,11 +161,12 @@ def _render_kpis(hydro_df, agri_df, zone_type, t):
         alert_color = {"critical": t["red"], "warning": t["amber"], "normal": t["green"]}.get(alert, t["text4"])
         alert_tag   = {"critical": "tag-red", "warning": "tag-amber", "normal": "tag-green"}.get(alert, "tag-blue")
 
-        _cloud_html = _kpi_card("Cloud Cover", f"{cloud}%", t["text4"]) if cloud else ""
+        _cloud_val  = f"{cloud}%" if (cloud is not None and not pd.isna(cloud)) else "—"
+        _cloud_tag  = "Last image" if (cloud is not None and not pd.isna(cloud)) else "Not in latest reading"
         st.markdown(f"""<div class="kpi-row">
             {_kpi_card("NDTI (Turbidity)", _fmt(ndti), t["blue"], delta=ndti_delta, delta_inverse=True)}
             {_kpi_card("NDWI (Water)", _fmt(ndwi) if (ndwi is not None and not pd.isna(ndwi) and ndwi != 0.0) else "—", t["blue"])}
-            {_cloud_html}
+            {_kpi_card("Cloud Cover", _cloud_val, t["text4"], _cloud_tag)}
             {_kpi_card("Alert Status", alert.upper(), alert_color, alert.capitalize(), alert_tag)}
         </div>""", unsafe_allow_html=True)
 
@@ -188,10 +189,12 @@ def _render_kpis(hydro_df, agri_df, zone_type, t):
         alert_color = {"critical": t["red"], "warning": t["amber"], "normal": t["green"]}.get(alert, t["text4"])
         alert_tag   = {"critical": "tag-red", "warning": "tag-amber", "normal": "tag-green"}.get(alert, "tag-blue")
 
+        _cloud_val2 = f"{cloud}%" if (cloud is not None and not pd.isna(cloud)) else "—"
+        _cloud_tag2 = "Last image" if (cloud is not None and not pd.isna(cloud)) else "Not in latest reading"
         st.markdown(f"""<div class="kpi-row">
-            {_kpi_card("NDVI (Vegetation)", _fmt(ndvi), t["green"], delta=ndvi_delta, delta_inverse=False)}
+            {_kpi_card("NDVI (Vegetation)",  _fmt(ndvi), t["green"], delta=ndvi_delta, delta_inverse=False)}
             {_kpi_card("NDRE (Chlorophyll)", _fmt(ndre), t["green"])}
-            {_kpi_card("Cloud Cover",        f"{cloud}%" if cloud else "N/A", t["text4"])}
+            {_kpi_card("Cloud Cover",        _cloud_val2, t["text4"], _cloud_tag2)}
             {_kpi_card("Alert Status",       alert.upper(), alert_color, alert.capitalize(), alert_tag)}
         </div>""", unsafe_allow_html=True)
 

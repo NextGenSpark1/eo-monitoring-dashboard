@@ -117,6 +117,27 @@ def get_css(t, theme_choice):
         border: 1px solid {t['collapse_bdr']} !important;
         border-radius: 8px !important;
     }}
+    /* ── Sidebar expanders ── */
+    section[data-testid="stSidebar"] [data-testid="stExpander"] {{
+        border: 1px solid {t['border']} !important;
+        border-radius: 10px !important;
+        background: {t['bg_card']} !important;
+        margin-bottom: 6px !important;
+        overflow: hidden;
+    }}
+    section[data-testid="stSidebar"] [data-testid="stExpander"] summary {{
+        padding: 10px 14px !important;
+        font-size: 12.5px !important;
+        font-weight: 600 !important;
+        color: {t['text2']} !important;
+        letter-spacing: 0.01em;
+    }}
+    section[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover {{
+        background: {t['border']} !important;
+    }}
+    section[data-testid="stSidebar"] [data-testid="stExpander"] > div:last-child {{
+        padding: 4px 14px 12px !important;
+    }}
 
     /* ── Dashboard header ── */
     .dash-header {{ display:flex; align-items:center; gap:16px; padding:6px 0 18px; }}

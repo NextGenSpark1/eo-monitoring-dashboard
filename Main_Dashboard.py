@@ -504,8 +504,7 @@ with st.sidebar:
         st.markdown(f'<div style="font-size:10px;color:{t["text4"]};margin-top:8px;line-height:1.6;">Get your ID via <b style="color:{t["text3"]};">@userinfobot</b> on Telegram.</div>', unsafe_allow_html=True)
 
     st.markdown("---")
-    with st.expander("Filters & Thresholds", expanded=True):
-        st.markdown(f'<p class="sb-label" style="margin:4px 0 8px;">Status Filter</p>', unsafe_allow_html=True)
+    with st.expander("Status Filter", expanded=True):
         show_normal   = st.checkbox("Normal",   value=True)
         show_warning  = st.checkbox("Warning",  value=True)
         show_critical = st.checkbox("Critical", value=True)
@@ -514,7 +513,7 @@ with st.sidebar:
         if show_warning:  active_statuses.append("warning")
         if show_critical: active_statuses.append("critical")
 
-        st.markdown(f'<p class="sb-label" style="margin:14px 0 8px;">Thresholds</p>', unsafe_allow_html=True)
+    with st.expander("Thresholds", expanded=True):
         if view_choice == "Hydro Reservoir":
             warning_threshold  = st.slider("Warning level (NDTI >=)", 0.0, 1.0, 0.03, 0.01, key="hydro_warn")
             critical_threshold = st.slider("Critical level (NDTI >=)", 0.0, 1.0, 0.09, 0.01, key="hydro_crit")
@@ -637,9 +636,11 @@ else:
 st.markdown(f"""
 <div class="kpi-row">
     <div class="kpi"><div class="kpi-accent" style="background:linear-gradient(90deg,{t['blue']},{t['green']});"></div>
-        <div class="kpi-label">Avg {module_name}</div><div class="kpi-val">{avg_value}</div>
-        <div style="font-size:11px;color:{t['text3']};margin:2px 0 4px;font-weight:500;">{_quality_label}</div>
-        <span class="kpi-tag tag-blue">{kpi_index_label}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div class="kpi-label">Avg {module_name}</div>
+            <span style="font-size:10px;color:{t['text3']};font-weight:600;background:{t['border']};padding:2px 7px;border-radius:10px;">{_quality_label}</span>
+        </div>
+        <div class="kpi-val">{avg_value}</div><span class="kpi-tag tag-blue">{kpi_index_label}</span></div>
     <div class="kpi {'kpi-glow' if num_critical>0 else ''}"><div class="kpi-accent" style="background:{t['red']};"></div>
         <div class="kpi-label">Critical Zones</div><div class="kpi-val">{num_critical}</div>{critical_badge}</div>
     <div class="kpi"><div class="kpi-accent" style="background:{t['amber']};"></div>

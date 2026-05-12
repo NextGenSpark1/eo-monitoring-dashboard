@@ -438,18 +438,28 @@ def render_search_ui():
     lat, lon     = location["lat"], location["lon"]
     cache_note   = " · from cache" if quick_result.get("from_cache") else ""
 
-    st.markdown(f"""<div style="margin:16px 0 20px;padding:12px 18px;border-radius:10px;
-        border-left:3px solid #2563eb;background:rgba(37,99,235,0.06);">
-        <span style="font-size:14px;font-weight:600;">{location['name']}</span>
-        <span class="meta-tag" style="margin-left:12px;">{lat:.4f}, {lon:.4f}{cache_note}</span>
-    </div>""", unsafe_allow_html=True)
+    _hdr_col, _save_col = st.columns([3, 1])
+    with _hdr_col:
+        st.markdown(f"""<div style="margin:16px 0 20px;padding:12px 18px;border-radius:10px;
+            border-left:3px solid #2563eb;background:rgba(37,99,235,0.06);">
+            <span style="font-size:14px;font-weight:600;">{location['name']}</span>
+            <span class="meta-tag" style="margin-left:12px;">{lat:.4f}, {lon:.4f}{cache_note}</span>
+        </div>""", unsafe_allow_html=True)
+    with _save_col:
+        st.markdown('<div style="padding-top:24px;">', unsafe_allow_html=True)
+        if st.button("Save to Dashboard", use_container_width=True, type="primary", key="save_top"):
+            with st.spinner("Saving..."):
+                _sr = save_custom_zone(quick_result)
+            if _sr["saved"]:
+                st.markdown(f'<div class="sb-feedback sb-ok">{_sr["message"]}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="sb-feedback sb-err">{_sr["message"]}</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="panel-label" style="margin-bottom:14px;">RECENT DATA — LAST 3 MONTHS</div>', unsafe_allow_html=True)
     _render_kpis(quick_result)
     _render_trend_chart(quick_result, label="Recent 3-Month Trend")
     _render_live_map(lat, lon, zone_type, zone_name=location["name"])
-
-    _render_save_button(quick_result)
 
     st.markdown('<hr style="margin:24px 0;border-color:rgba(0,0,0,0.07);">', unsafe_allow_html=True)
     st.markdown('<div class="panel-label" style="margin-bottom:14px;">FULL 12-MONTH HISTORY</div>', unsafe_allow_html=True)
