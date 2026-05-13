@@ -21,7 +21,10 @@ from src.database import (
     add_subscriber,
     get_all_subscribers,
     read_saved_zones,
+    get_system_config,
+    set_system_config,
 )
+from src.auth import require_auth, get_role, get_current_email, render_user_info
 from src.zone_dashboard import render_zone_dashboard
 from src.telegram_helper import (
     send_telegram_message,
@@ -48,6 +51,13 @@ st.set_page_config(
 )
 
 # ──────────────────────────────────────────────────────────────
+# AUTH CHECK
+# ──────────────────────────────────────────────────────────────
+require_auth()
+current_role  = get_role()
+current_email = get_current_email()
+
+# ──────────────────────────────────────────────────────────────
 # SAVED ZONES — load once per session, cleared on auto-refresh
 # ──────────────────────────────────────────────────────────────
 if "saved_zones" not in st.session_state:
@@ -70,6 +80,7 @@ time_left  = max(0, int(REFRESH_INTERVAL - time_since))
 # THEME SYSTEM
 # ──────────────────────────────────────────────────────────────
 with st.sidebar:
+    render_user_info(LIGHT if st.session_state.get("_theme", "Light") == "Light" else DARK)
     st.markdown("""
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
         <div style="width:34px;height:34px;border-radius:10px;
@@ -457,7 +468,14 @@ def build_trend_chart(trends_df, value_col, warning_thresh=None, critical_thresh
 with st.sidebar:
     st.markdown("---")
     st.markdown(f'<p class="sb-label">Monitoring Module</p>', unsafe_allow_html=True)
-    view_choice = st.radio("Module", ["Hydro Reservoir", "Agriculture"], label_visibility="collapsed")
+    if current_role == "hydro_viewer":
+        view_choice = "Hydro Reservoir"
+        st.markdown(f'<div style="font-size:13px;font-weight:600;color:#2563eb;padding:6px 0;">Hydro Reservoir</div>', unsafe_allow_html=True)
+    elif current_role == "agri_viewer":
+        view_choice = "Agriculture"
+        st.markdown(f'<div style="font-size:13px;font-weight:600;color:#16a34a;padding:6px 0;">Agriculture</div>', unsafe_allow_html=True)
+    else:
+        view_choice = st.radio("Module", ["Hydro Reservoir", "Agriculture"], label_visibility="collapsed")
 
     st.markdown("---")
     with st.expander("Subscribe to Telegram Alerts", expanded=False):
@@ -512,20 +530,43 @@ with st.sidebar:
         if show_critical: active_statuses.append("critical")
 
     with st.expander("Thresholds", expanded=False):
-        if view_choice == "Hydro Reservoir":
-            warning_threshold  = st.slider("Warning level (NDTI >=)", 0.0, 1.0, 0.03, 0.01, key="hydro_warn")
-            critical_threshold = st.slider("Critical level (NDTI >=)", 0.0, 1.0, 0.09, 0.01, key="hydro_crit")
-            st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
-                <span style="color:{t['green']};">●</span> Normal: &lt; {warning_threshold:.2f}<br>
-                <span style="color:{t['amber']};">●</span> Warning: {warning_threshold:.2f} – {critical_threshold:.2f}<br>
-                <span style="color:{t['red']};">●</span> Critical: ≥ {critical_threshold:.2f}</div>""", unsafe_allow_html=True)
+        _cfg = get_system_config()
+        if current_role == "admin":
+            if view_choice == "Hydro Reservoir":
+                warning_threshold  = st.slider("Warning (NDTI >=)", 0.0, 1.0, _cfg.get("hydro_warning_threshold", 0.03), 0.01, key="hydro_warn")
+                critical_threshold = st.slider("Critical (NDTI >=)", 0.0, 1.0, _cfg.get("hydro_critical_threshold", 0.09), 0.01, key="hydro_crit")
+                st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
+                    <span style="color:{t['green']};">●</span> Normal: &lt; {warning_threshold:.2f}<br>
+                    <span style="color:{t['amber']};">●</span> Warning: {warning_threshold:.2f} – {critical_threshold:.2f}<br>
+                    <span style="color:{t['red']};">●</span> Critical: ≥ {critical_threshold:.2f}</div>""", unsafe_allow_html=True)
+                if st.button("Save as Global Default", use_container_width=True, key="save_hydro_thresh"):
+                    set_system_config("hydro_warning_threshold",  warning_threshold,  current_email)
+                    set_system_config("hydro_critical_threshold", critical_threshold, current_email)
+                    st.success("Saved.")
+            else:
+                warning_threshold  = st.slider("Warning (NDVI <)", 0.0, 1.0, _cfg.get("agri_warning_threshold", 0.40), 0.05, key="agri_warn")
+                critical_threshold = st.slider("Critical (NDVI <)", 0.0, 1.0, _cfg.get("agri_critical_threshold", 0.20), 0.05, key="agri_crit")
+                st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
+                    <span style="color:{t['green']};">●</span> Normal: &gt; {warning_threshold:.2f}<br>
+                    <span style="color:{t['amber']};">●</span> Warning: {critical_threshold:.2f} – {warning_threshold:.2f}<br>
+                    <span style="color:{t['red']};">●</span> Critical: &lt; {critical_threshold:.2f}</div>""", unsafe_allow_html=True)
+                if st.button("Save as Global Default", use_container_width=True, key="save_agri_thresh"):
+                    set_system_config("agri_warning_threshold",  warning_threshold,  current_email)
+                    set_system_config("agri_critical_threshold", critical_threshold, current_email)
+                    st.success("Saved.")
         else:
-            warning_threshold  = st.slider("Warning level (NDVI <)", 0.0, 1.0, 0.40, 0.05, key="agri_warn")
-            critical_threshold = st.slider("Critical level (NDVI <)", 0.0, 1.0, 0.20, 0.05, key="agri_crit")
-            st.markdown(f"""<div style="font-size:10.5px;line-height:2.2;color:{t['sb_text']};">
-                <span style="color:{t['green']};">●</span> Normal: &gt; {warning_threshold:.2f}<br>
-                <span style="color:{t['amber']};">●</span> Warning: {critical_threshold:.2f} – {warning_threshold:.2f}<br>
-                <span style="color:{t['red']};">●</span> Critical: &lt; {critical_threshold:.2f}</div>""", unsafe_allow_html=True)
+            if view_choice == "Hydro Reservoir":
+                warning_threshold  = _cfg.get("hydro_warning_threshold", 0.03)
+                critical_threshold = _cfg.get("hydro_critical_threshold", 0.09)
+            else:
+                warning_threshold  = _cfg.get("agri_warning_threshold", 0.40)
+                critical_threshold = _cfg.get("agri_critical_threshold", 0.20)
+            st.markdown(f"""<div style="font-size:10.5px;line-height:2.4;color:{t['sb_text']};">
+                <span style="color:{t['green']};">●</span> Normal: {'< ' + f'{warning_threshold:.2f}' if view_choice == 'Hydro Reservoir' else '> ' + f'{warning_threshold:.2f}'}<br>
+                <span style="color:{t['amber']};">●</span> Warning: {warning_threshold:.2f} – {critical_threshold:.2f}<br>
+                <span style="color:{t['red']};">●</span> Critical: {'≥ ' + f'{critical_threshold:.2f}' if view_choice == 'Hydro Reservoir' else '< ' + f'{critical_threshold:.2f}'}
+                <br><span style="font-size:10px;color:{t['text4']};font-style:italic;">Set by administrator</span>
+            </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
     st.markdown(f"""<div style="font-size:10px;color:{t['text4']};line-height:1.7;padding-top:6px;">

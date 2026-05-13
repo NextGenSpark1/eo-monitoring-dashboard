@@ -11,6 +11,7 @@ import datetime
 from utils.theme import DARK, LIGHT
 from utils.styles import get_css
 from src.dynamic_zone import render_search_ui
+from src.auth import require_auth, render_user_info
 
 st.set_page_config(
     page_title="Live Lookup — EO Dashboard",
@@ -19,8 +20,12 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+require_auth()
+
 # ── Sidebar ──────────────────────────────────────────────────
 with st.sidebar:
+    _t_pre = LIGHT if st.session_state.get("_theme", "Light") == "Light" else DARK
+    render_user_info(_t_pre)
     st.markdown("""
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
         <div style="width:34px;height:34px;border-radius:10px;

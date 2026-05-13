@@ -588,6 +588,42 @@ def zone_in_watchlist(zone_name: str) -> bool:
         return False
  
 
+# SYSTEM CONFIG
+
+def get_system_config() -> dict:
+    """Fetch all threshold defaults set by admin."""
+    client = get_supabase_client()
+    result = client.table("system_config").select("key,value").execute()
+    return {r["key"]: float(r["value"]) for r in result.data}
+
+
+def set_system_config(key: str, value: float, updated_by: str):
+    """Update a threshold default (admin only)."""
+    from datetime import datetime
+    client = get_supabase_client()
+    client.table("system_config").upsert({
+        "key":        key,
+        "value":      str(round(value, 4)),
+        "updated_by": updated_by,
+        "updated_at": datetime.now().isoformat()
+    }, on_conflict="key").execute()
+
+
+# USER ROLES
+
+def get_all_user_roles() -> list:
+    """Return all users and their roles (admin panel use)."""
+    client = get_supabase_client()
+    result = client.table("user_roles").select("*").order("created_at").execute()
+    return result.data
+
+
+def set_user_role(user_id: str, role: str):
+    """Update a user's role (admin only)."""
+    client = get_supabase_client()
+    client.table("user_roles").update({"role": role}).eq("user_id", user_id).execute()
+
+
 # MAIN
 
 if __name__ == "__main__":
