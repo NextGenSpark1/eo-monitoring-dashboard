@@ -143,21 +143,13 @@ def _render_auth_page():
         </div>
     </div>""", unsafe_allow_html=True)
 
-    # ── Form card ─────────────────────────────────────────────
-    st.markdown("""
-    <div style="background:#fff;border:1px solid #e2e8f0;border-radius:16px;
-        padding:28px 28px 20px;box-shadow:0 4px 24px rgba(0,0,0,0.07);
-        margin-bottom:4px;">
-    """, unsafe_allow_html=True)
-
+    # ── Form tabs ─────────────────────────────────────────────
     login_tab, signup_tab = st.tabs(["Sign In", "Create Account"])
 
     with login_tab:
         _login_form()
     with signup_tab:
         _signup_form()
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # ── Footer ────────────────────────────────────────────────
     st.markdown("""
